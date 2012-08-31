@@ -54,7 +54,7 @@
 #define PLUGIN_SHORTNAME		"teamclerks"						    // Shorter version of the full name, used in file paths, and other things
 #define PLUGIN_AUTHOR			"kain"      						    // Author of the plugin
 #define PLUGIN_DESCRIPTION		"A handful of utility plugins for L4D"  // Description of the plugin
-#define PLUGIN_VERSION			"0.1.0"								    // http://wiki.eclipse.org/Version_Numbering
+#define PLUGIN_VERSION			"0.1.1"								    // http://wiki.eclipse.org/Version_Numbering
 #define PLUGIN_URL				"http://teamclerks.googlecode.com/"	    // URL associated with the project
 #define PLUGIN_CVAR_PREFIX		PLUGIN_SHORTNAME				        // Prefix for cvars
 #define PLUGIN_CMD_PREFIX		PLUGIN_SHORTNAME				        // Prefix for cmds
@@ -144,7 +144,7 @@ public OnPluginStartEx()
 
 	/* Initial setup of modules after event manager is done setting up.
 	 * To disable certain module, simply comment out the line. */
-
+	
 	_SkeetPractice_OnPluginStart();
 	
 	// Create cvar for control plugin state
@@ -155,7 +155,7 @@ public OnPluginStartEx()
 	if (GetConVarBool(convar) && !IsDedicatedServer())
 	{
 		SetConVarBool(convar, false);
-		DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Unable to enable rotoblin, running on a listen server!");
+		DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Unable to enable teamclerks, running on a listen server!");
 	}
 	else
 	{
@@ -181,7 +181,7 @@ public _Main_Enable_CvarChange(Handle:convar, const String:oldValue[], const Str
 	if (GetConVarBool(convar) && !IsDedicatedServer())
 	{
 		SetConVarBool(convar, false);
-		DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Unable to enable rotoblin, running on a listen server!");
+		DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Unable to enable teamclerks, running on a listen server!");
 		PrintToChatAll("[%s] Unable to enable %s! %s only support dedicated servers", PLUGIN_TAG, PLUGIN_FULLNAME, PLUGIN_FULLNAME);
 		return;
 	}

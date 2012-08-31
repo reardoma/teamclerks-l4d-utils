@@ -33,6 +33,7 @@ public _SkeetPractice_OnPluginStart()
     // This will be called when teamclerks.main is enabled/disabled
     HookPublicEvent(EVENT_ONPLUGINENABLE, _SP_OnPluginEnabled);
     HookPublicEvent(EVENT_ONPLUGINDISABLE, _SP_OnPluginDisabled);
+    HookPublicEvent(EVENT_ONCLIENTDISCONNECT_POST, _SP_OnClientDisconnect);
 }
 
 /**
@@ -97,23 +98,18 @@ public _SkeetPractice_CvarChange(Handle:convar, const String:oldValue[], const S
     }
 }
 
-public Action:timerRestartMap(Handle:timer)
-{
-    RestartMapNow();
-}
+new Handle:_SP_HunterSurvivor[MAXPLAYERS+1];
 
-new Handle:HunterSurvivor[MAXPLAYERS+1];
-
-public OnClientDisconnect(client)
+public _SP_OnClientDisconnect(client)
 {
-    if (HunterSurvivor[client] != INVALID_HANDLE)
+    if (_SP_HunterSurvivor[client] != INVALID_HANDLE)
     {
-        KillTimer(HunterSurvivor[client]);
-        HunterSurvivor[client] = INVALID_HANDLE;
+        KillTimer(_SP_HunterSurvivor[client]);
+        _SP_HunterSurvivor[client] = INVALID_HANDLE;
     }
 }
 
-public Event_PlayerPounced(Handle:event, const String:name[], bool:dontBroadcast)
+public _SP_Event_PlayerPounced(Handle:event, const String:name[], bool:dontBroadcast)
 {
     new hunterClient = GetClientOfUserId(GetEventInt(event, "userid"));
     decl String:hunterName[256];
@@ -125,15 +121,15 @@ public Event_PlayerPounced(Handle:event, const String:name[], bool:dontBroadcast
     PrintHintText(survivorClient,"%s had %i health left.", hunterName, hunterHealth);
     
     new Handle:hunterPack;
-    HunterSurvivor[hunterClient] = CreateDataTimer(1.0, killPouncedHunter, hunterPack);
+    _SP_HunterSurvivor[hunterClient] = CreateDataTimer(1.0, _SP_killPouncedHunter, hunterPack);
     WritePackCell(hunterPack, hunterClient);
     
     new Handle:survivorPack;
-    HunterSurvivor[survivorClient] = CreateDataTimer(2.0, healPouncedSurvivor, survivorPack);
+    _SP_HunterSurvivor[survivorClient] = CreateDataTimer(2.0, _SP_healPouncedSurvivor, survivorPack);
     WritePackCell(survivorPack, survivorClient);
 }
 
-public Action:killPouncedHunter(Handle:timer, Handle:pack)
+public Action:_SP_killPouncedHunter(Handle:timer, Handle:pack)
 {
     new hunterClient;
     
@@ -142,10 +138,10 @@ public Action:killPouncedHunter(Handle:timer, Handle:pack)
     
     ForcePlayerSuicide(hunterClient);
     
-    HunterSurvivor[hunterClient] = INVALID_HANDLE;
+    _SP_HunterSurvivor[hunterClient] = INVALID_HANDLE;
 }
 
-public Action:healPouncedSurvivor(Handle:timer, Handle:pack)
+public Action:_SP_healPouncedSurvivor(Handle:timer, Handle:pack)
 {
     new survivorClient;
     
@@ -163,7 +159,7 @@ public Action:healPouncedSurvivor(Handle:timer, Handle:pack)
     // QUICK, turn it back on as a cheat
     SetCommandFlags("give", flags | FCVAR_CHEAT);
     
-    HunterSurvivor[survivorClient] = INVALID_HANDLE;
+    _SP_HunterSurvivor[survivorClient] = INVALID_HANDLE;
 }
 
 //
@@ -173,7 +169,7 @@ public Action:healPouncedSurvivor(Handle:timer, Handle:pack)
 CommandSkeetPracticeStart()
 {
     // Hook the pounce event up.
-    HookEvent("lunge_pounce", Event_PlayerPounced);
+    HookEvent("lunge_pounce", _SP_Event_PlayerPounced);
     
     //doing director_stop on the server sets the below variables like so
     SetConVarFloat(FindConVar("versus_tank_chance"), 0.00);
@@ -223,7 +219,7 @@ CommandSkeetPracticeStart()
 
 CommandSkeetPracticeStop()
 {    
-    UnhookEvent("lunge_pounce", Event_PlayerPounced);
+    UnhookEvent("lunge_pounce", _SP_Event_PlayerPounced);
     
     ResetConVar(FindConVar("director_no_bosses"));
     ResetConVar(FindConVar("director_no_mobs"));
@@ -259,20 +255,4 @@ CommandSkeetPracticeStop()
     PrintToChatAll("[SM] Skeet practice stopped.");
     
     RestartMapIn(5.0);
-}
-
-RestartMapIn(Float:seconds)
-{    
-    CreateTimer(seconds, timerRestartMap, _, TIMER_FLAG_NO_MAPCHANGE);
-    PrintToChatAll("[SM] Map will restart in %f seconds.", seconds);
-}
-
-RestartMapNow()
-{
-    // Create a buffer for the current map name
-    decl String:currentMap[256];
-    // Set the buffer to the current map name
-    GetCurrentMap(currentMap, 256);
-    // Run 'changelevel' as if RCON to the current map name
-    ServerCommand("changelevel %s", currentMap);
 }

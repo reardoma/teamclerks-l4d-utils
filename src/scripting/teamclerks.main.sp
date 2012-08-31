@@ -94,6 +94,27 @@ public Plugin:myinfo =
     url = PLUGIN_URL
 }
 
+public Action:timerRestartMap(Handle:timer)
+{
+    RestartMapNow();
+}
+
+public RestartMapIn(Float:seconds)
+{    
+    CreateTimer(seconds, timerRestartMap, _, TIMER_FLAG_NO_MAPCHANGE);
+    PrintToChatAll("[SM] Map will restart in %f seconds.", seconds);
+}
+
+public RestartMapNow()
+{
+    // Create a buffer for the current map name
+    decl String:currentMap[256];
+    // Set the buffer to the current map name
+    GetCurrentMap(currentMap, 256);
+    // Run 'changelevel' as if RCON to the current map name
+    ServerCommand("changelevel %s", currentMap);
+}
+
 /**
  * Called on pre plugin start.
  *

@@ -14,6 +14,7 @@
   <property name="base" value="." />
   <property name="src" value="${base}/src/scripting" />
   <property name="cfg" value="${base}/src/cfg" />
+  <property name="smcfg" value="${base}/src/configs" />
   <property name="build" value="${base}/build" />
   
   <!-- This MUST be overwritten in the build.properties file if you are going to use   -->
@@ -54,8 +55,13 @@
   <!-- Builds and distributes the plugin to a destination server setup (including config files) -->
   <target name="dist" depends="compile" description="Builds and distributes the plugin">
     <move file="${src}/${pluginName}.smx" toFile="${dist}/addons/sourcemod/plugins/${plugin}.smx" />
-    <copy todir="${dist}/cfg">
+    <copy todir="${dist}/cfg/teamclerks">
       <fileset dir="${cfg}">
+        <include name="**/*.cfg" />
+      </fileset>
+    </copy>
+    <copy todir="${dist}/addons/sourcemod/configs/teamclerks">
+      <fileset dir="${smcfg}">
         <include name="**/*.cfg" />
       </fileset>
     </copy>

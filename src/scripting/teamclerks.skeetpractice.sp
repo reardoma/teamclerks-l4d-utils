@@ -9,7 +9,7 @@
 //     Private
 // --------------------
 
-static const String: SP_CVAR[]               = "skeetpractice";
+static const String: SP_CVAR[]               = "skeet_practice";
 static const String: SP_CVAR_DEFAULT_VALUE[] = "0";
 static const String: SP_CVAR_DESCRIPTION[]   = "Whether skeet practice is enabled.";
 static       Handle: g_hSkeetPracticeCvar    = INVALID_HANDLE;
@@ -171,47 +171,6 @@ CommandSkeetPracticeStart()
     // Hook the pounce event up.
     HookEvent("lunge_pounce", _SP_Event_PlayerPounced);
     
-    //doing director_stop on the server sets the below variables like so
-    SetConVarFloat(FindConVar("versus_tank_chance"), 0.00);
-    SetConVarFloat(FindConVar("versus_witch_chance"), 0.00);
-    SetConVarFloat(FindConVar("versus_tank_chance_intro"), 0.00);
-    SetConVarFloat(FindConVar("versus_tank_chance_finale"), 0.00);
-    SetConVarFloat(FindConVar("versus_witch_chance_intro"), 0.00);
-    SetConVarFloat(FindConVar("versus_witch_chance_finale"), 0.00);
-    SetConVarInt(FindConVar("director_no_bosses"), 1);
-    SetConVarInt(FindConVar("director_no_mobs"), 1);
-    SetConVarInt(FindConVar("director_ready_duration"), 0);
-    SetConVarInt(FindConVar("z_common_limit"), 0);
-    SetConVarInt(FindConVar("z_mega_mob_size"), 1); //why not 0? only Valve knows
-    
-    //empty teams of survivors dont cycle the round
-    SetConVarInt(FindConVar("sb_all_bot_team"), 1);
-    
-    // Set it so only hunters can load
-    SetConVarInt(FindConVar("z_minion_limit"), 4);
-    SetConVarInt(FindConVar("z_hunter_limit"), 4);
-    SetConVarInt(FindConVar("z_versus_boomer_limit"), 0);
-    SetConVarInt(FindConVar("z_versus_smoker_limit"), 0);
-    
-    // Set respawn timers really low
-    SetConVarInt(FindConVar("z_ghost_delay_max"), 1);
-    SetConVarInt(FindConVar("z_ghost_delay_min"), 1);
-    
-    // Turn on alltalk for fun
-    SetConVarInt(FindConVar("sv_alltalk"), 1);
-    SetConVarInt(FindConVar("vs_max_team_switches"),999);
-    
-    // Turn off items and junk
-    SetConVarInt(FindConVar("director_convert_pills"),0);
-    SetConVarFloat(FindConVar("director_vs_convert_pills"),0.0);
-    SetConVarFloat(FindConVar("director_pain_pill_density"),0.0);
-    SetConVarFloat(FindConVar("director_propane_tank_density"),0.0);
-    SetConVarFloat(FindConVar("director_gas_can_density"),0.0);
-    SetConVarFloat(FindConVar("director_oxygen_tank_density"),0.0);
-    SetConVarFloat(FindConVar("director_molotov_density"),0.0);
-    SetConVarFloat(FindConVar("director_pipe_bomb_density"),0.0);
-    SetConVarFloat(FindConVar("director_pistol_density"),0.0);
-    
     PrintToChatAll("[SM] Skeet practice loaded.");
     
     RestartMapIn(5.0);
@@ -220,37 +179,6 @@ CommandSkeetPracticeStart()
 CommandSkeetPracticeStop()
 {    
     UnhookEvent("lunge_pounce", _SP_Event_PlayerPounced);
-    
-    ResetConVar(FindConVar("director_no_bosses"));
-    ResetConVar(FindConVar("director_no_mobs"));
-    ResetConVar(FindConVar("director_ready_duration"));
-    ResetConVar(FindConVar("z_common_limit"));
-    ResetConVar(FindConVar("z_mega_mob_size"));
-    ResetConVar(FindConVar("sb_all_bot_team"));
-    ResetConVar(FindConVar("z_minion_limit"));
-    ResetConVar(FindConVar("z_hunter_limit"));
-    ResetConVar(FindConVar("z_versus_boomer_limit"));
-    ResetConVar(FindConVar("z_versus_smoker_limit"));
-    ResetConVar(FindConVar("versus_tank_chance_intro"));
-    ResetConVar(FindConVar("versus_tank_chance_finale"));
-    ResetConVar(FindConVar("versus_tank_chance"));
-    ResetConVar(FindConVar("versus_witch_chance_intro"));
-    ResetConVar(FindConVar("versus_witch_chance_finale"));
-    ResetConVar(FindConVar("versus_witch_chance"));
-    ResetConVar(FindConVar("z_ghost_delay_max"));
-    ResetConVar(FindConVar("z_ghost_delay_min"));
-    ResetConVar(FindConVar("sv_alltalk"));
-    ResetConVar(FindConVar("vs_max_team_switches"));
-    ResetConVar(FindConVar("director_convert_pills"));
-    ResetConVar(FindConVar("director_scavenge_item_override"));
-    ResetConVar(FindConVar("director_vs_convert_pills"));
-    ResetConVar(FindConVar("director_pain_pill_density"));
-    ResetConVar(FindConVar("director_propane_tank_density"));
-    ResetConVar(FindConVar("director_gas_can_density"));
-    ResetConVar(FindConVar("director_oxygen_tank_density"));
-    ResetConVar(FindConVar("director_molotov_density"));
-    ResetConVar(FindConVar("director_pipe_bomb_density"));
-    ResetConVar(FindConVar("director_pistol_density"));
     
     PrintToChatAll("[SM] Skeet practice stopped.");
     

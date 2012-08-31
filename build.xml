@@ -1,5 +1,5 @@
 
-<project name="plugin-builder" default="dist">
+<project name="plugin-builder" default="build">
   
   <!-- Specifying any property in the 'build.properties' file will cause the following -->
   <!-- properties to be written over. This file is a simple way to mark up properties  -->
@@ -13,15 +13,16 @@
 
   <property name="base" value="." />
   <property name="src" value="${base}/src/scripting" />
+  <property name="cfg" value="${base}/src/cfg" />
   <property name="build" value="${base}/build" />
-  <!-- You technically do not have to override this in your build properties, but you  -->
-  <!-- CAN to have the dist folder be your local server's sourcemod/plugins dir. This  -->
-  <!-- will allow you to simply run 'ant dist', then run your server.                  -->
-  <!-- By default, this points to build to make the build script work out-of-the-box.  -->
-  <property name="dist" value="${buid}" />
-  <property name="pluginName" value="${plugin}.main" />
-  <property name="sourcePawn" value="${base}/bin/sourcepawn/spcomp.exe" />
   
+  <!-- This MUST be overwritten in the build.properties file if you are going to use   -->
+  <!-- dist to deploy to your local (testing) server. This should be the base of your  -->
+  <!-- server (read: the folder with the 'addons' directory).                          -->
+  <property name="dist" value="" />
+  
+  <property name="pluginName" value="${plugin}.main" />
+  <property name="sourcePawn" value="${base}/bin/sourcepawn/spcomp.exe" />  
   
   <!--         -->
   <!-- PUBLICS -->
@@ -50,8 +51,14 @@
     </antcall>
   </target>
   
+  <!-- Builds and distributes the plugin to a destination server setup (including config files) -->
   <target name="dist" depends="compile" description="Builds and distributes the plugin">
-    <move file="${src}/${pluginName}.smx" toFile="${dist}/${plugin}.smx" />
+    <move file="${src}/${pluginName}.smx" toFile="${dist}/addons/sourcemod/plugins/${plugin}.smx" />
+    <copy todir="${dist}/cfg">
+      <fileset dir="${cfg}">
+        <include name="**/*.cfg" />
+      </fileset>
+    </copy>
     <antcall target="-outputDescription">
       <param name="outputDir" value="${dist}" />
     </antcall>

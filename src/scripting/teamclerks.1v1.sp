@@ -110,10 +110,6 @@ public _1v1_Event_PlayerPounced(Handle:event, const String:name[], bool:dontBroa
     new Handle:hunterPack;
     _1v1_HunterSurvivor[hunterClient] = CreateDataTimer(1.0, _1v1_killPouncedHunter, hunterPack);
     WritePackCell(hunterPack, hunterClient);
-    
-    new Handle:survivorPack;
-    _1v1_HunterSurvivor[survivorClient] = CreateDataTimer(2.0, _1v1_adjustSurvivorHealth, survivorPack);
-    WritePackCell(survivorPack, survivorClient);
 }
 
 public Action:_1v1_killPouncedHunter(Handle:timer, Handle:pack)
@@ -128,44 +124,21 @@ public Action:_1v1_killPouncedHunter(Handle:timer, Handle:pack)
     _1v1_HunterSurvivor[hunterClient] = INVALID_HANDLE;
 }
 
-public Action:_1v1_adjustSurvivorHealth(Handle:timer, Handle:pack)
-{
-    new survivorClient;
-    
-    ResetPack(pack);
-    survivorClient = ReadPackCell(pack);
-    
-    // So, this was fired a second after the hunter was killed, the 
-    // survivor should be NO MORE than 30 damage lower (25dp + 5scratch)
-    // than before he was hit.
-    new hp = GetClientHealth(survivorClient);
-    
-    if (hp <= 33)
-    {
-        // You died... sorry.
-        ForcePlayerSuicide(survivorClient);
-    }
-    else if (hp <= 67)
-    {
-        // You're down to your last pounce
-        SetEntData(survivorClient, FindDataMapOffs(survivorClient,"m_iHealth"), 34, 4, true);
-    }
-    else
-    {
-        // You haven't been pounced... till now.
-        SetEntData(survivorClient, FindDataMapOffs(survivorClient,"m_iHealth"), 67, 4, true);
-    }
-    
-    _1v1_HunterSurvivor[survivorClient] = INVALID_HANDLE;
-}
-
 Command1v1Start()
 {
     // Hook the pounce event up.
     HookEvent("lunge_pounce", _1v1_Event_PlayerPounced);
+    
+    PrintToChatAll("[SM] 1v1 mode loaded.");
+    
+    RestartMapIn(5.0);
 }
 
 Command1v1Stop()
 {
     UnhookEvent("lunge_pounce", _1v1_Event_PlayerPounced);
+    
+    PrintToChatAll("[SM] 1v1 mode loaded.");
+    
+    RestartMapIn(5.0);
 }

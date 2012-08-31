@@ -7,10 +7,10 @@
 //	 Private
 // --------------------
 
-static	const	String:	SP_CVAR[]               = "skeetpractice";
-static  const   String: SP_CVAR_DEFAULT_VALUE[] = "0";
-static  const   String: SP_CVAR_DESCRIPTION[]   = "Whether skeet practice is enabled.";
-static		    Handle:	g_hSkeetPracticeCvar    = INVALID_HANDLE;
+static	const	String:	SP_CVAR[]               	= "skeetpractice";
+static  const   String: SP_CVAR_DEFAULT_VALUE[] 	= "0";
+static  const   String: SP_CVAR_DESCRIPTION[]   	= "Whether skeet practice is enabled.";
+static		    Handle:	g_hSkeetPracticeCvar    	= INVALID_HANDLE;
 
 // **********************************************
 //			 Forwards
@@ -83,6 +83,16 @@ public Action:timerRestartMap(Handle:timer)
 	RestartMapNow();
 }
 
+new Handle:HunterSurvivor[MAXPLAYERS+1];
+
+public OnClientDisconnect(client)
+{
+	if (HunterSurvivor[client] != INVALID_HANDLE)
+	{
+		KillTimer(HunterSurvivor[client]);
+		HunterSurvivor[client] = INVALID_HANDLE;
+	}
+}
 
 public Event_PlayerPounced(Handle:event, const String:name[], bool:dontBroadcast)
 {
@@ -94,11 +104,47 @@ public Event_PlayerPounced(Handle:event, const String:name[], bool:dontBroadcast
 	
 	PrintHintText(hunterClient,"%s had %i health left.", hunterName, hunterHealth);
 	PrintHintText(survivorClient,"%s had %i health left.", hunterName, hunterHealth);
+    
+	new Handle:hunterPack;
+	HunterSurvivor[hunterClient] = CreateDataTimer(1.0, killPouncedHunter, hunterPack);
+	WritePackCell(hunterPack, hunterClient);
 	
-	// Kill the hunter
+	new Handle:survivorPack;
+	HunterSurvivor[survivorClient] = CreateDataTimer(2.0, healPouncedSurvivor, survivorPack);
+	WritePackCell(survivorPack, survivorClient);
+}
+
+public Action:killPouncedHunter(Handle:timer, Handle:pack)
+{
+	new hunterClient;
+	
+	ResetPack(pack);
+	hunterClient = ReadPackCell(pack);
+	
 	ForcePlayerSuicide(hunterClient);
-	// Heal the survivor
-	GivePlayerItem(survivorClient, "health");
+	
+	HunterSurvivor[hunterClient] = INVALID_HANDLE;
+}
+
+public Action:healPouncedSurvivor(Handle:timer, Handle:pack)
+{
+	new survivorClient;
+	
+	ResetPack(pack);
+	survivorClient = ReadPackCell(pack);
+	
+	new flags = GetCommandFlags("give");
+	// Turn this off as a cheat
+	SetCommandFlags("give", flags & ~FCVAR_CHEAT);
+	if (IsClientInGame(survivorClient))
+	{
+		// Make the survivor give himself some health
+		FakeClientCommand(survivorClient, "give health");
+	}
+	// QUICK, turn it back on as a cheat
+	SetCommandFlags("give", flags | FCVAR_CHEAT);
+	
+	HunterSurvivor[survivorClient] = INVALID_HANDLE;
 }
 
 //
@@ -111,6 +157,12 @@ CommandSkeetPracticeStart()
 	HookEvent("lunge_pounce", Event_PlayerPounced);
 	
 	//doing director_stop on the server sets the below variables like so
+	SetConVarFloat(FindConVar("versus_tank_chance"), 0.00);
+	SetConVarFloat(FindConVar("versus_witch_chance"), 0.00);
+	SetConVarFloat(FindConVar("versus_tank_chance_intro"), 0.00);
+	SetConVarFloat(FindConVar("versus_tank_chance_finale"), 0.00);
+	SetConVarFloat(FindConVar("versus_witch_chance_intro"), 0.00);
+	SetConVarFloat(FindConVar("versus_witch_chance_finale"), 0.00);
 	SetConVarInt(FindConVar("director_no_bosses"), 1);
 	SetConVarInt(FindConVar("director_no_mobs"), 1);
 	SetConVarInt(FindConVar("director_ready_duration"), 0);
@@ -132,8 +184,22 @@ CommandSkeetPracticeStart()
 	
 	// Turn on alltalk for fun
 	SetConVarInt(FindConVar("sv_alltalk"), 1);
+	SetConVarInt(FindConVar("vs_max_team_switches"),999);
+	
+	// Turn off items and junk
+	SetConVarInt(FindConVar("director_convert_pills"),0);
+	SetConVarFloat(FindConVar("director_vs_convert_pills"),0.0);
+	SetConVarFloat(FindConVar("director_pain_pill_density"),0.0);
+	SetConVarFloat(FindConVar("director_propane_tank_density"),0.0);
+	SetConVarFloat(FindConVar("director_gas_can_density"),0.0);
+	SetConVarFloat(FindConVar("director_oxygen_tank_density"),0.0);
+	SetConVarFloat(FindConVar("director_molotov_density"),0.0);
+	SetConVarFloat(FindConVar("director_pipe_bomb_density"),0.0);
+	SetConVarFloat(FindConVar("director_pistol_density"),0.0);
 	
 	PrintToChatAll("[SM] Skeet practice loaded.");
+	
+	RestartMapIn(5.0);
 }
 
 CommandSkeetPracticeStop()
@@ -150,9 +216,26 @@ CommandSkeetPracticeStop()
 	ResetConVar(FindConVar("z_hunter_limit"));
 	ResetConVar(FindConVar("z_versus_boomer_limit"));
 	ResetConVar(FindConVar("z_versus_smoker_limit"));
+	ResetConVar(FindConVar("versus_tank_chance_intro"));
+	ResetConVar(FindConVar("versus_tank_chance_finale"));
+	ResetConVar(FindConVar("versus_tank_chance"));
+	ResetConVar(FindConVar("versus_witch_chance_intro"));
+	ResetConVar(FindConVar("versus_witch_chance_finale"));
+	ResetConVar(FindConVar("versus_witch_chance"));
 	ResetConVar(FindConVar("z_ghost_delay_max"));
 	ResetConVar(FindConVar("z_ghost_delay_min"));
 	ResetConVar(FindConVar("sv_alltalk"));
+	ResetConVar(FindConVar("vs_max_team_switches"));
+	ResetConVar(FindConVar("director_convert_pills"));
+	ResetConVar(FindConVar("director_scavenge_item_override"));
+	ResetConVar(FindConVar("director_vs_convert_pills"));
+	ResetConVar(FindConVar("director_pain_pill_density"));
+	ResetConVar(FindConVar("director_propane_tank_density"));
+	ResetConVar(FindConVar("director_gas_can_density"));
+	ResetConVar(FindConVar("director_oxygen_tank_density"));
+	ResetConVar(FindConVar("director_molotov_density"));
+	ResetConVar(FindConVar("director_pipe_bomb_density"));
+	ResetConVar(FindConVar("director_pistol_density"));
 	
 	PrintToChatAll("[SM] Skeet practice stopped.");
 	

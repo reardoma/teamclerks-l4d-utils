@@ -1,5 +1,5 @@
 
-<project name="plugin-builder" default="build">
+<project name="plugin-builder" default="dist">
   
   <!-- Specifying any property in the 'build.properties' file will cause the following -->
   <!-- properties to be written over. This file is a simple way to mark up properties  -->
@@ -14,6 +14,11 @@
   <property name="base" value="." />
   <property name="src" value="${base}/src/scripting" />
   <property name="build" value="${base}/build" />
+  <!-- You technically do not have to override this in your build properties, but you  -->
+  <!-- CAN to have the dist folder be your local server's sourcemod/plugins dir. This  -->
+  <!-- will allow you to simply run 'ant dist', then run your server.                  -->
+  <!-- By default, this points to build to make the build script work out-of-the-box.  -->
+  <property name="dist" value="${buid}" />
   <property name="pluginName" value="${plugin}.main" />
   <property name="sourcePawn" value="${base}/bin/sourcepawn/spcomp.exe" />
   
@@ -40,7 +45,16 @@
   <target name="build" depends="compile" description="Builds the plugin">
     <mkdir dir="${build}" />
     <move file="${src}/${pluginName}.smx" tofile="${build}/${plugin}.smx" />
-    <antcall target="-outputDescription" />
+    <antcall target="-outputDescription">
+      <param name="outputDir" value="${build}" />
+    </antcall>
+  </target>
+  
+  <target name="dist" depends="compile" description="Builds and distributes the plugin">
+    <move file="${src}/${pluginName}.smx" toFile="${dist}/${plugin}.smx" />
+    <antcall target="-outputDescription">
+      <param name="outputDir" value="${dist}" />
+    </antcall>
   </target>
   
   
@@ -66,7 +80,7 @@
     <echo>------------------------------------------------------------------------</echo>
     <echo>- Built: ${pluginName}.sp</echo>
     <echo>-    as: ${plugin}.smx</echo>
-    <echo>-    in: ${build}</echo>
+    <echo>-    in: ${outputDir}</echo>
     <echo>------------------------------------------------------------------------</echo>
   </target>
   

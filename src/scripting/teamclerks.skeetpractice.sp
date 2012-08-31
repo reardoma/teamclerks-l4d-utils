@@ -26,8 +26,8 @@ static       Handle: g_hSkeetPracticeCvar    = INVALID_HANDLE;
  */
 public _SkeetPractice_OnPluginStart()
 {
-	_H_TankManager_OnPluginStart();
-	// Always register the convar for skeetpractice and disable it.
+    _H_TankManager_OnPluginStart();
+    // Always register the convar for skeetpractice and disable it.
     g_hSkeetPracticeCvar = CreateConVar(SP_CVAR, SP_CVAR_DEFAULT_VALUE, SP_CVAR_DESCRIPTION, FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY, true, 0.0, true, 1.0);
     
     // This will be called when teamclerks.main is enabled/disabled
@@ -63,9 +63,9 @@ public _SP_OnPluginDisabled()
  */
 public _SkeetPractice_TankSpawned(Handle:event, const String:name[], bool:dontBroadcast)
 {
-	new tankClient = GetClientOfUserId(GetEventInt(event, "userid"));
-	// Hopefully, this tankClient will NEVER be a player with this mod enabled.
-	ForcePlayerSuicide(tankClient);
+    new tankClient = GetClientOfUserId(GetEventInt(event, "userid"));
+    // Hopefully, this tankClient will NEVER be a player with this mod enabled.
+    ForcePlayerSuicide(tankClient);
 }
 
 /**

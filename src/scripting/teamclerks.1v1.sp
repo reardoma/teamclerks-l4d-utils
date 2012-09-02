@@ -138,7 +138,5 @@ Command1v1Stop()
 {
     UnhookEvent("lunge_pounce", _1v1_Event_PlayerPounced);
     
-    PrintToChatAll("[SM] 1v1 mode loaded.");
-    
-    RestartMapIn(5.0);
+    PrintToChatAll("[SM] 1v1 mode unloaded.");
 }

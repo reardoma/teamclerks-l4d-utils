@@ -1,0 +1,19 @@
+"Games"
+{
+  "#default"
+  {
+    "Keys"
+    {
+      // You can add/edit any of these key-value pairs to allow
+      // custom module loading via !load commands.
+      
+      "1v1"             "teamclerks/1v1.cfg"
+      "2v2"             "teamclerks/2v2.cfg"
+      "3v3"             "teamclerks/3v3.cfg"
+      "3v3h"            "teamclerks/3v3h.cfg"
+      "4v4"             "teamclerks/4v4.cfg"
+      "4v4h"            "teamclerks/4v4h.cfg"
+      "skeetpractice"   "teamclerks/skeetpractice.cfg"
+    }
+  }
+}

@@ -180,7 +180,5 @@ CommandSkeetPracticeStop()
 {    
     UnhookEvent("lunge_pounce", _SP_Event_PlayerPounced);
     
-    PrintToChatAll("[SM] Skeet practice stopped.");
-    
-    RestartMapIn(5.0);
+    PrintToChatAll("[SM] Skeet practice unloaded.");
 }

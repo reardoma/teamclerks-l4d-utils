@@ -14,7 +14,7 @@
   <property name="base" value="." />
   <property name="src" value="${base}/src/scripting" />
   <property name="cfg" value="${base}/src/cfg" />
-  <property name="smcfg" value="${base}/src/configs" />
+  <property name="smcfg" value="${base}/src/gamedata" />
   <property name="build" value="${base}/build" />
   
   <!-- This MUST be overwritten in the build.properties file if you are going to use   -->
@@ -60,9 +60,9 @@
         <include name="**/*.cfg" />
       </fileset>
     </copy>
-    <copy todir="${dist}/addons/sourcemod/configs/teamclerks">
+    <copy todir="${dist}/addons/sourcemod/gamedata">
       <fileset dir="${smcfg}">
-        <include name="**/*.cfg" />
+        <include name="**/*.txt" />
       </fileset>
     </copy>
     <antcall target="-outputDescription">

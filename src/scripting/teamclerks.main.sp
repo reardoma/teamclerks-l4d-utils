@@ -73,6 +73,7 @@
 #include "rotoblin.helpers/eventmanager.inc"
 #include "rotoblin.helpers/wrappers.inc"
 
+#include "teamclerks.load.sp"
 #include "teamclerks.skeetpractice.sp"
 #include "teamclerks.1v1.sp"
 
@@ -167,6 +168,7 @@ public OnPluginStartEx()
     /* Initial setup of modules after event manager is done setting up.
      * To disable certain module, simply comment out the line. */
     
+    _Load_OnPluginStart();
     _SkeetPractice_OnPluginStart();
     _1v1_OnPluginStart();
     

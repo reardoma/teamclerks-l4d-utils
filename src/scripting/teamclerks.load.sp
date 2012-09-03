@@ -28,27 +28,27 @@
 #include <sourcemod>
 #include <sdktools>
 
+#include "rotoblin.helpers/eventmanager.inc"
+#include "rotoblin.helpers/clientindexes.inc"
+
+#define VOTE_THRESHOLD 0.5
+
 // --------------------
 //     Public
 // --------------------
-new                     SurvivorIndex[MAXPLAYERS+1] = {0};
-new                     InfectedIndex[MAXPLAYERS+1] = {0};
-new                     SpectateIndex[MAXPLAYERS+1] = {0};
+new            bool: hasVoted[MAXPLAYERS+1]       = {false};
+new          String: votingOn[]                   = "";
+new            bool: currentlyVoting              = false;
+new            bool: tallyingVotes                = false;
+new          Handle: recentVoters[MAXPLAYERS+1];
 
 // --------------------
 //     Private
 // --------------------
-
-static const String: TC_LOAD_CVAR[]               = "teamclerks_load_enable";
-static const String: TC_LOAD_CVAR_DEFAULT_VALUE[] = "0";
-static const String: TC_LOAD_CVAR_DESCRIPTION[]   = "Whether the load modual is enabled.";
-static       Handle: g_hLoadCvar                  = INVALID_HANDLE;
 static       Handle: TC_CONFIG                    = INVALID_HANDLE;
 
 static const String: TC_LOAD_CMD[]                = "load";
 static const String: TC_FORCE_LOAD_CMD[]          = "force";
-
-static       bool:   currentlyVoting              = false;
 
 
 // **********************************************
@@ -62,48 +62,12 @@ static       bool:   currentlyVoting              = false;
  */
 public _Load_OnPluginStart()
 {    
-    // Always register the convar for Load and disable it.
-    g_hLoadCvar = CreateConVar(TC_LOAD_CVAR, TC_LOAD_CVAR_DEFAULT_VALUE, TC_LOAD_CVAR_DESCRIPTION, FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY, true, 0.0, true, 1.0);
-    
     TC_CONFIG = LoadGameConfigFile("teamclerks.load");
 
     RegAdminCmd("tc_force", _Load_OnCommandForce, ADMFLAG_CHANGEMAP, "tc_force - force the loading of a modual");
-    
-    // This will be called when teamclerks.main is enabled/disabled
-    HookPublicEvent(EVENT_ONPLUGINENABLE, _Load_OnPluginEnabled);
-    HookPublicEvent(EVENT_ONPLUGINDISABLE, _Load_OnPluginDisabled);
-}
-
-/**
- * Plugin is now enabled.
- *
- * @noreturn
- */
-public _Load_OnPluginEnabled()
-{
-    HookConVarChange(g_hLoadCvar, _Load_CvarChange);
-    
-    HookPublicEvent(EVENT_ONCLIENTCONNECTED, _Load_OnClientConnected);
-    HookPublicEvent(EVENT_ONCLIENTDISCONNECT_POST, _Load_OnClientDisconnect);
 
     AddCommandListener(_Load_OnClientCommandIssued, "say");
     AddCommandListener(_Load_OnClientCommandIssued, "say_team");
-}
-
-/**
- * Plugin is now disabled.
- *
- * @noreturn
- */
-public _Load_OnPluginDisabled()
-{
-    UnhookConVarChange(g_hLoadCvar, _Load_CvarChange);
-    
-    UnhookPublicEvent(EVENT_ONCLIENTCONNECTED, _Load_OnClientConnected);
-    UnhookPublicEvent(EVENT_ONCLIENTDISCONNECT_POST, _Load_OnClientDisconnect);
-    
-    RemoveCommandListener(_Load_OnClientCommandIssued, "say");
-    RemoveCommandListener(_Load_OnClientCommandIssued, "say_team");
 }
 
 public Action:_Load_OnCommandForce(client, args)
@@ -112,52 +76,10 @@ public Action:_Load_OnCommandForce(client, args)
     
     if (GetCmdArg(1, moduleName, sizeof(moduleName)) > 0)
     {
-        // Means there was a module to load.
+        // Means there was a module specified to load.
         _Load_Load_Module(moduleName);
     }
-    
-    PrintToServer("Got command: %s", moduleName);
 }
-
-/**
- * No mobs cvar changed.
- *
- * @param convar        Handle to the convar that was changed.
- * @param oldValue        String containing the value of the convar before it was changed.
- * @param newValue        String containing the new value of the convar.
- * @noreturn
- */
-public _Load_CvarChange(Handle:convar, const String:oldValue[], const String:newValue[])
-{
-    if (oldValue[0] == newValue[0])
-    {
-        return;
-    }
-    else
-    {
-        new value = StringToInt(newValue);
-        
-        if (value)
-        {
-            _Load_OnPluginEnabled();
-        }
-        else
-        {
-            _Load_OnPluginDisabled();
-        }
-    }
-}
-
-public _Load_OnClientDisconnect(client)
-{
-    
-}
-
-public _Load_OnClientConnected(client)
-{
-    
-}
-
 
 public Action:_Load_OnClientCommandIssued(client, const String:command[], argc)
 {
@@ -165,55 +87,50 @@ public Action:_Load_OnClientCommandIssued(client, const String:command[], argc)
     {
         return Plugin_Continue;
     }
-    
+
     decl String:sayWord[MAX_NAME_LENGTH];
     GetCmdArg(1, sayWord, sizeof(sayWord));
     
-    if (!StrContains(sayWord, "!", false))
+    if (StrContains(sayWord, "!", false) != 0)
     {
         // We ONLY allow !-commands
         return Plugin_Continue;
     }
     
+    decl String:tokens[32][MAX_NAME_LENGTH];
+    ExplodeString(sayWord, " ", tokens, 32, MAX_NAME_LENGTH);
+    
+    // Get the first command; might be 'load', 'force', etc.
     new idx = StrContains(sayWord, TC_LOAD_CMD, false);
-
+    
     // !LOAD
     if (idx == 1)
     {
-        decl String:moduleName[MAX_NAME_LENGTH];
-        
-        if (GetCmdArg(2, moduleName, sizeof(moduleName)) < 1)
+        if (!_Load_Check_Module(tokens[1]))
         {
+            PrintToChat(client, "Module %s not available", tokens[1]);
             return Plugin_Continue;
         }
         
-        if (currentlyVoting)
-        {
-            // Cast the vote
-            return Plugin_Handled;
-        }
-        else
-        {
-            // Start a new vote
-        }
+        _Load_Vote_On_Module(client, tokens[1]);
+        
+        return Plugin_Handled;
     }
     
-    idx = StrContains(sayWord, TC_FORCE_LOAD_CMD, false);
+    idx = StrContains(command, TC_FORCE_LOAD_CMD, false);
     
     // !FORCELOAD
     if (idx == 1)
     {
         if (CheckCommandAccess(client, "tc_force", 0))
-        {
-            decl String:moduleName[MAX_NAME_LENGTH];
-            
-            if (GetCmdArg(2, moduleName, sizeof(moduleName)) < 1)
+        {            
+            if (!_Load_Check_Module(tokens[1]))
             {
                 return Plugin_Continue;
             }
             
             // Admin can use tc_force... do it.
-            _Load_Load_Module(moduleName);
+            _Load_Load_Module(tokens[1]);
             
             return Plugin_Handled;
         }
@@ -222,14 +139,212 @@ public Action:_Load_OnClientCommandIssued(client, const String:command[], argc)
     return Plugin_Continue;
 }
 
-_Load_Load_Module(const String:target[])
+/**
+ * We are given a window for a vote request to load a module. When
+ * the initial load is requested, a timer is created to tally the
+ * votes, and if the tallies are in the majority, the load is called.
+ */
+public Action:_Load_Tally_Votes(Handle:timer)
+{
+    currentlyVoting = false;
+    tallyingVotes = true;
+    
+    if (_Load_Is_Vote_Passing())
+    {
+        _Load_Load_Module(votingOn);
+    }
+    else
+    {
+        // Vote failed.
+        PrintToChatAll("Vote failed for module: %s", votingOn);
+    }
+    
+    _Load_End_Vote();
+}
+
+public Action:_Load_Allow_Start_Vote(Handle:timer, Handle:pack)
+{
+    new voterClient;
+    
+    ResetPack(pack);
+    voterClient = ReadPackCell(pack);
+    
+    // There is no guarantee that voterClient is still a valid
+    // clientid, so don't use it for anything.
+    // This will make it so someone who starts a vote, leaves the
+    // server, and immediately rejoins will not be able to start
+    // another vote until the timer runs out.
+    recentVoters[voterClient] = INVALID_HANDLE;
+}
+
+/**
+ * Returns whether the vote is passing
+ */
+bool:_Load_Is_Vote_Passing(bool:requireAll=false)
+{
+    new yesVotes = 0;
+    for (new i = 0; i < sizeof(hasVoted); i++)
+    {
+        if (hasVoted[i])
+        {
+            yesVotes ++;
+        }
+    }
+    
+    new survivorPlayerCount = 0;
+    for (new client = FIRST_CLIENT; client <= MaxClients; client++)
+    {
+        if (IsClientInGame(client) && !IsFakeClient(client) && GetClientTeam(client) == TEAM_SURVIVOR)
+        {
+            survivorPlayerCount ++;
+        }
+    }
+    
+    new infectedPlayerCount = 0;
+    for (new client = FIRST_CLIENT; client <= MaxClients; client++)
+    {
+        if (IsClientInGame(client) && !IsFakeClient(client) && GetClientTeam(client) == TEAM_INFECTED)
+        {
+            infectedPlayerCount ++;
+        }
+    }
+    
+    new survsAndInfs = survivorPlayerCount + infectedPlayerCount;
+    
+    new Float:percent = FloatDiv(float(yesVotes), float(survsAndInfs));
+    
+    if (requireAll)
+    {
+        return percent == 1.0;
+    }
+    else
+    {
+        return percent > VOTE_THRESHOLD;
+    }
+}
+
+/**
+ * By here, we have guaranteed that target is an actual loadable
+ * module, and we're going to start voting or cast a current vote.
+ */
+_Load_Vote_On_Module(client, String:target[])
+{
+    if (!tallyingVotes)
+    {
+        if (currentlyVoting)
+        {
+            if (StrEqual(votingOn, target, false))
+            {
+                _Load_Cast_Vote(client, target);
+            }
+        }
+        else if (recentVoters[client] == INVALID_HANDLE)
+        {
+            _Load_Start_Vote(client, target);
+        }
+        else
+        {
+            PrintToChat(client, "You started a vote within the last %i seconds; please wait to start a new one.", 60);
+        }
+    }
+    else
+    {
+        // Voting not allowed right now.
+    }
+}
+
+/**
+ * By here, we are casting a vote for a currently active voting
+ * process and we know that target is the module being voted on.
+ * We need to ensure that client has not already cast a vote.
+ */
+_Load_Cast_Vote(client, String:target[])
+{    
+    if (hasVoted[client])
+    {
+        // Naughty; send a message back.
+        PrintToChat(client, "You have already cast your vote for %s.", target);
+    }
+    else
+    {
+        hasVoted[client] = true;
+        
+        PrintToChat(client, "You have cast a vote for %s.", target);
+        
+        if (_Load_Is_Vote_Passing(true))
+        {
+            // Then that was a 100% agreement.
+            _Load_Load_Module(target);
+        }
+    }
+}
+
+/**
+ * By here, we are starting a new vote on a target we know. Let's
+ * set up out variables for the vote.
+ */
+_Load_Start_Vote(client, String:target[])
+{
+    currentlyVoting = true;
+    strcopy(votingOn, MAX_NAME_LENGTH, target);
+    hasVoted[client] = true;
+    
+    CreateTimer(20.0, _Load_Tally_Votes);
+
+    new Handle:clientPack;
+    recentVoters[client] = CreateDataTimer(60.0, _Load_Allow_Start_Vote, clientPack);
+    WritePackCell(clientPack, client);
+    
+    decl String:nick[64];
+    GetClientName(client, nick, sizeof(nick));
+    
+    PrintToChatAll("%s has started a vote for: %s ", nick, target);
+    
+    // If we're the only player, then it should load.
+    if (_Load_Is_Vote_Passing(true))
+    {
+        // Then that was a 100% agreement.
+        _Load_Load_Module(target);
+    }
+}
+
+/**
+ * Checks that the target module is actually a valid entry in the gamedata.
+ * If the target is valid, toLoad is given the valid and the return is true.
+ * If the target is not valid, false is returned and toLoad remains unchanged.
+ */
+bool:_Load_Check_Module(String:target[], String:toLoad[]="")
+{
+    return GameConfGetKeyValue(TC_CONFIG, target, toLoad, MAX_NAME_LENGTH);
+}
+
+/**
+ * Loads the actual module voted up (or forced) by the players.
+ */
+_Load_Load_Module(String:target[])
 {
     decl String:loadable[MAX_NAME_LENGTH];
     
-    if (GameConfGetKeyValue(TC_CONFIG, target, loadable, MAX_NAME_LENGTH))
+    if (_Load_Check_Module(target, loadable))
     {
+        PrintToChatAll("Vote successful; loading module: %s...", target);
         // Successfully read the target's value from the config file into loadable.
+        _Load_End_Vote();
         // Load it!
         ServerCommand("exec %s", loadable);
     }
+}
+
+/**
+ * Resets all the vote variables to their original positions.
+ */
+_Load_End_Vote()
+{
+    for (new i = 0; i < sizeof(hasVoted); i++)
+    {
+        hasVoted[i] = false;
+    }
+    votingOn = "";
+    currentlyVoting = false;
+    tallyingVotes = false;
 }

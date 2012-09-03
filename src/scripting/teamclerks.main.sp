@@ -71,6 +71,7 @@
 
 #include "rotoblin.helpers/debug.inc"
 #include "rotoblin.helpers/eventmanager.inc"
+#include "rotoblin.helpers/clientindexes.inc"
 #include "rotoblin.helpers/wrappers.inc"
 
 #include "teamclerks.load.sp"
@@ -167,6 +168,8 @@ public OnPluginStartEx()
 
     /* Initial setup of modules after event manager is done setting up.
      * To disable certain module, simply comment out the line. */
+    
+    _H_ClientIndexes_OnPluginStart();
     
     _Load_OnPluginStart();
     _SkeetPractice_OnPluginStart();

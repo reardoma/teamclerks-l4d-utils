@@ -1,3 +1,14 @@
+/**
+ * Normally, these files are for true gamedata, but the TeamClerks load
+ * plugin uses this file to determine:
+ * 
+ *    1) What modules are loadable (key names)
+ *    2) What loading a module does (config value)
+ *
+ * Almost everything module-driven can be expressed as a config file to
+ * be executed on the server. I started with my skeetpractice config and
+ * slowly added more and more complexity to it before it became a plugin.
+ */
 "Games"
 {
   "#default"

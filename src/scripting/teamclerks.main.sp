@@ -74,9 +74,12 @@
 #include "rotoblin.helpers/clientindexes.inc"
 #include "rotoblin.helpers/wrappers.inc"
 
+#include "teamclerks.cvarsilencer.sp"
 #include "teamclerks.load.sp"
 #include "teamclerks.skeetpractice.sp"
 #include "teamclerks.1v1.sp"
+#include "teamclerks.teamselect.sp"
+#include "teamclerks.lerps.sp"
 
 // --------------------
 //       Private
@@ -94,27 +97,6 @@ public Plugin:myinfo =
     description = PLUGIN_DESCRIPTION,
     version = PLUGIN_VERSION,
     url = PLUGIN_URL
-}
-
-public Action:timerRestartMap(Handle:timer)
-{
-    RestartMapNow();
-}
-
-public RestartMapIn(Float:seconds)
-{    
-    CreateTimer(seconds, timerRestartMap, _, TIMER_FLAG_NO_MAPCHANGE);
-    PrintToChatAll("[SM] Map will restart in %f seconds.", seconds);
-}
-
-public RestartMapNow()
-{
-    // Create a buffer for the current map name
-    decl String:currentMap[256];
-    // Set the buffer to the current map name
-    GetCurrentMap(currentMap, 256);
-    // Run 'changelevel' as if RCON to the current map name
-    ServerCommand("changelevel %s", currentMap);
 }
 
 /**
@@ -171,13 +153,16 @@ public OnPluginStartEx()
     
     _H_ClientIndexes_OnPluginStart();
     
+    _CvarSilencer_OnPluginStart();
     _Load_OnPluginStart();
     _SkeetPractice_OnPluginStart();
     _1v1_OnPluginStart();
+    _TeamSelect_OnPluginStart();
+    _Lerps_OnPluginStart();
     
     // Create cvar for control plugin state
     Format(buffer, sizeof(buffer), "Sets whether %s is enabled", PLUGIN_FULLNAME);
-    convar = CreateConVarEx("enable", "0", buffer, FCVAR_PLUGIN | FCVAR_NOTIFY);
+    convar = CreateConVarEx("enable", "0", buffer, FCVAR_PLUGIN | FCVAR_SPONLY);
 
     if (convar == INVALID_HANDLE) ThrowError("Unable to create main enable cvar!");
     if (GetConVarBool(convar) && !IsDedicatedServer())

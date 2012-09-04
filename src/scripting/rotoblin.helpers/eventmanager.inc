@@ -52,10 +52,11 @@ enum EVENT_TYPE
 	EVENT_ONCLIENTPOSTADMINCHECK,
 	EVENT_ONENTITYCREATED,
 	EVENT_ONENTITYDESTROYED,
-	EVENT_ONPLAYERRUNCMD
+	EVENT_ONPLAYERRUNCMD,
+	EVENT_ONCLIENTSETTINGSCHANGED
 }
 
-#define TOTAL_EVENTS 12
+#define TOTAL_EVENTS 13
 
 // --------------------
 //       Private
@@ -89,6 +90,7 @@ public OnPluginStart()
 	g_hEventForwards[9]		= CreateForward(ET_Ignore, Param_Cell, Param_String);
 	g_hEventForwards[10]	= CreateForward(ET_Ignore, Param_Cell);
 	g_hEventForwards[11]	= CreateForward(ET_Ignore, Param_Cell, Param_CellByRef, Param_CellByRef, Param_Array, Param_Array, Param_CellByRef);
+	g_hEventForwards[12]    = CreateForward(ET_Ignore);
 
 	// Call on plugin start extended if found
 	new Function:func = GetFunctionByName(INVALID_HANDLE, CALL_ON_START);
@@ -236,6 +238,19 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 	Call_PushCellRef(weapon);
 	Call_Finish();
 	return Plugin_Continue;
+}
+
+/**
+ * Called whenever the client's settings are changed.
+ * 
+ * @param client        Index of the client.
+ * @noreturn
+ */
+public OnClientSettingsChanged(client)
+{
+    Call_StartForward(g_hEventForwards[12]);
+    Call_PushCell(client);
+    Call_Finish();
 }
 
 // **********************************************

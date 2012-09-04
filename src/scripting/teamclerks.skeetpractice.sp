@@ -4,6 +4,7 @@
 #include <sdktools>
 
 #include "rotoblin.helpers/tankmanager.inc"
+#include "teamclerks.helpers/restartmap.inc"
 
 // --------------------
 //     Private
@@ -28,7 +29,7 @@ public _SkeetPractice_OnPluginStart()
 {
     _H_TankManager_OnPluginStart();
     // Always register the convar for skeetpractice and disable it.
-    g_hSkeetPracticeCvar = CreateConVar(SP_CVAR, SP_CVAR_DEFAULT_VALUE, SP_CVAR_DESCRIPTION, FCVAR_PLUGIN|FCVAR_NOTIFY, true, 0.0, true, 1.0);
+    g_hSkeetPracticeCvar = CreateConVar(SP_CVAR, SP_CVAR_DEFAULT_VALUE, SP_CVAR_DESCRIPTION, FCVAR_PLUGIN|FCVAR_SPONLY, true, 0.0, true, 1.0);
     
     // This will be called when teamclerks.main is enabled/disabled
     HookPublicEvent(EVENT_ONPLUGINENABLE, _SP_OnPluginEnabled);

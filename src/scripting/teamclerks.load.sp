@@ -28,6 +28,8 @@
 #include <sourcemod>
 #include <sdktools>
 
+#include "teamclerks.helpers/clients.inc"
+
 #include "rotoblin.helpers/eventmanager.inc"
 #include "rotoblin.helpers/clientindexes.inc"
 
@@ -177,6 +179,11 @@ public Action:_Load_Allow_Start_Vote(Handle:timer, Handle:pack)
     recentVoters[voterClient] = INVALID_HANDLE;
 }
 
+
+/**************************************
+ *             PRIVATES               *
+ **************************************/
+
 /**
  * Returns whether the vote is passing
  */
@@ -191,25 +198,7 @@ bool:_Load_Is_Vote_Passing(bool:requireAll=false)
         }
     }
     
-    new survivorPlayerCount = 0;
-    for (new client = FIRST_CLIENT; client <= MaxClients; client++)
-    {
-        if (IsClientInGame(client) && !IsFakeClient(client) && GetClientTeam(client) == TEAM_SURVIVOR)
-        {
-            survivorPlayerCount ++;
-        }
-    }
-    
-    new infectedPlayerCount = 0;
-    for (new client = FIRST_CLIENT; client <= MaxClients; client++)
-    {
-        if (IsClientInGame(client) && !IsFakeClient(client) && GetClientTeam(client) == TEAM_INFECTED)
-        {
-            infectedPlayerCount ++;
-        }
-    }
-    
-    new survsAndInfs = survivorPlayerCount + infectedPlayerCount;
+    new survsAndInfs = Get_Survivor_Player_Count() + Get_Infected_Player_Count();
     
     new Float:percent = FloatDiv(float(yesVotes), float(survsAndInfs));
     

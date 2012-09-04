@@ -4,6 +4,7 @@
 #include <sdktools>
 
 #include "rotoblin.helpers/tankmanager.inc"
+#include "teamclerks.helpers/restartmap.inc"
 
 // --------------------
 //     Private
@@ -28,7 +29,7 @@ public _1v1_OnPluginStart()
 {
     _H_TankManager_OnPluginStart();
     // Always register the convar for 1v1 and disable it.
-    g_h1v1Cvar = CreateConVar(m1v1_CVAR, m1v1_CVAR_DEFAULT_VALUE, m1v1_CVAR_DESCRIPTION, FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY, true, 0.0, true, 1.0);
+    g_h1v1Cvar = CreateConVar(m1v1_CVAR, m1v1_CVAR_DEFAULT_VALUE, m1v1_CVAR_DESCRIPTION, FCVAR_PLUGIN|FCVAR_SPONLY, true, 0.0, true, 1.0);
     
     // This will be called when teamclerks.main is enabled/disabled
     HookPublicEvent(EVENT_ONPLUGINENABLE, _1v1_OnPluginEnabled);

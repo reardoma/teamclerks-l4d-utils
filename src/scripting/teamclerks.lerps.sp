@@ -4,9 +4,6 @@
  * player who requests it, so I forked his code.
  */
 
-#pragma semicolon 1
-#include <sourcemod>
-
 //#define clamp(%0, %1, %2) ( ((%0) < (%1)) ? (%1) : ( ((%0) > (%2)) ? (%2) : (%0) ) )
 #define MAX(%0,%1) (((%0) > (%1)) ? (%0) : (%1))
 
@@ -66,10 +63,7 @@ public _Lerps_OnPluginStart()
     hFixLerpValue = CreateConVar("sm_fixlerp", "0", "Fix Lerp values clamping incorrectly when interp_ratio 0 is allowed", FCVAR_PLUGIN);
     hMaxLerpValue = CreateConVar("sm_max_interp", "0.5", "Kick players whose settings breach this Hard upper-limit for player lerps.", FCVAR_PLUGIN);
     
-    RegConsoleCmd("sm_lerps", Lerps_Cmd, "List the Lerps of all players in game", FCVAR_PLUGIN);
-
-    AddCommandListener(_Lerps_OnClientCommandIssued, "say");
-    AddCommandListener(_Lerps_OnClientCommandIssued, "say_team");
+    AddCommandListenerEx(Lerps_Cmd, LERPS_CMD);
     
     HookPublicEvent(EVENT_ONCLIENTDISCONNECT_POST, _Lerps_OnClientDisconnect_Post);
     HookPublicEvent(EVENT_ONCLIENTSETTINGSCHANGED, _Lerps_OnClientSettingsChanged);
@@ -91,7 +85,7 @@ public _Lerps_OnClientSettingsChanged(client)
     }
 }
 
-public Action:Lerps_Cmd(client, args)
+public Action:Lerps_Cmd(client, const String:command[], args)
 {
     new lerpcnt;
     for(new rclient=1; rclient <= MaxClients; rclient++)
@@ -102,42 +96,6 @@ public Action:Lerps_Cmd(client, args)
         }
     }
     return Plugin_Handled;
-}
-
-
-public Action:_Lerps_OnClientCommandIssued(client, const String:command[], argc)
-{
-    if (argc < 1)
-    {
-        return Plugin_Continue;
-    }
-
-    decl String:sayWord[MAX_NAME_LENGTH];
-    GetCmdArg(1, sayWord, sizeof(sayWord));
-    
-    if (StrContains(sayWord, "!", false) != 0)
-    {
-        // We ONLY allow !-commands
-        return Plugin_Continue;
-    }
-    
-    decl String:tokens[32][MAX_NAME_LENGTH];
-    ExplodeString(sayWord, " ", tokens, 32, MAX_NAME_LENGTH);
-    
-    if (StrContains(sayWord, LERPS_CMD, false) == 1)
-    {
-        new lerpcnt;
-        for(new rclient=1; rclient <= MaxClients; rclient++)
-        {
-            if(IsClientInGame(rclient) && !IsFakeClient(rclient))
-            {
-                PrintToChat(client, "%02d. %N Lerp: %.01f", ++lerpcnt, rclient, (GetCurrentLerp(rclient)*1000));
-            }
-        }
-        return Plugin_Handled;
-    }
-
-    return Plugin_Continue;   
 }
 
 ScanAllPlayersLerp()

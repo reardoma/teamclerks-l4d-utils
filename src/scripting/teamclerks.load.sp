@@ -23,16 +23,6 @@
  * 
  */
 
-#pragma semicolon 1
-
-#include <sourcemod>
-#include <sdktools>
-
-#include "teamclerks.helpers/clients.inc"
-
-#include "rotoblin.helpers/eventmanager.inc"
-#include "rotoblin.helpers/clientindexes.inc"
-
 #define VOTE_THRESHOLD 0.5
 
 // --------------------

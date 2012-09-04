@@ -70,9 +70,14 @@
 #include <sdktools.inc>
 
 #include "rotoblin.helpers/debug.inc"
+#include "rotoblin.helpers/cmdmanager.inc"
 #include "rotoblin.helpers/eventmanager.inc"
 #include "rotoblin.helpers/clientindexes.inc"
 #include "rotoblin.helpers/wrappers.inc"
+#include "rotoblin.helpers/tankmanager.inc"
+
+#include "teamclerks.helpers/clients.inc"
+#include "teamclerks.helpers/restartmap.inc"
 
 #include "teamclerks.cvarsilencer.sp"
 #include "teamclerks.load.sp"

@@ -1,11 +1,3 @@
-#pragma semicolon 1
-
-#include <sourcemod>
-#include <sdktools>
-
-#include "rotoblin.helpers/tankmanager.inc"
-#include "teamclerks.helpers/restartmap.inc"
-
 // --------------------
 //     Private
 // --------------------

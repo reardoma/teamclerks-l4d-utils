@@ -7,10 +7,6 @@
  * module to module) that I would prefer clients not be bother with.
  */
 
-#pragma semicolon 1
-
-#include <sourcemod>
-
 #define NUM_CVARS 50
 
 new String:cvars[NUM_CVARS][64] = {

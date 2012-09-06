@@ -33,6 +33,7 @@ new          String: votingOn[]                   = "";
 new            bool: currentlyVoting              = false;
 new            bool: tallyingVotes                = false;
 new          Handle: recentVoters[MAXPLAYERS+1];
+new          String: currentlyLoaded[]            = "";
 
 // --------------------
 //     Private
@@ -55,11 +56,25 @@ static const String: TC_FORCE_LOAD_CMD[]          = "force";
 public _Load_OnPluginStart()
 {    
     TC_CONFIG = LoadGameConfigFile("teamclerks.load");
+    GameConfGetKeyValue(TC_CONFIG, "DEFAULT", currentlyLoaded, MAX_NAME_LENGTH);
 
     RegAdminCmd("tc_force", _Load_OnCommandForce, ADMFLAG_CHANGEMAP, "tc_force - force the loading of a modual");
 
     AddCommandListener(_Load_OnClientCommandIssued, "say");
     AddCommandListener(_Load_OnClientCommandIssued, "say_team");
+    
+    HookPublicEvent(EVENT_ONCLIENTDISCONNECT_POST, _Load_OnClientDisconnectPost);
+
+    _Load_Load_Default_If_Present();
+}
+
+public _Load_OnClientDisconnectPost(client)
+{
+    if (!Server_Has_Player_Clients())
+    {
+        // No clients, load the default.
+        _Load_Load_Default_If_Present();
+    }
 }
 
 public Action:_Load_OnCommandForce(client, args)
@@ -151,7 +166,7 @@ public Action:_Load_Tally_Votes(Handle:timer)
         PrintToChatAll("Vote failed for module: %s", votingOn);
     }
     
-    _Load_End_Vote();
+    _Load_End_Vote(votingOn);
 }
 
 public Action:_Load_Allow_Start_Vote(Handle:timer, Handle:pack)
@@ -308,16 +323,30 @@ _Load_Load_Module(String:target[])
     {
         PrintToChatAll("Vote successful; loading module: %s...", target);
         // Successfully read the target's value from the config file into loadable.
-        _Load_End_Vote();
+        _Load_End_Vote(target);
         // Load it!
         ServerCommand("exec %s", loadable);
     }
 }
 
 /**
+ * Loads the default config if present.
+ */
+_Load_Load_Default_If_Present()
+{
+    decl String:defalt[MAX_NAME_LENGTH];
+    
+    if (_Load_Check_Module("DEFAULT", defalt) && !StrEqual("", defalt))
+    {
+        // Okay, there IS a default value specified
+        _Load_Load_Module(defalt);
+    }
+}
+
+/**
  * Resets all the vote variables to their original positions.
  */
-_Load_End_Vote()
+_Load_End_Vote(String:target[])
 {
     for (new i = 0; i < sizeof(hasVoted); i++)
     {
@@ -326,4 +355,5 @@ _Load_End_Vote()
     votingOn = "";
     currentlyVoting = false;
     tallyingVotes = false;
+    strcopy(currentlyLoaded, MAX_NAME_LENGTH, target);
 }

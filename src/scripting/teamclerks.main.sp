@@ -157,6 +157,7 @@ public OnPluginStartEx()
      * To disable certain module, simply comment out the line. */
     
     _H_ClientIndexes_OnPluginStart();
+    _H_CommandManager_OnPluginStart();
     
     _CvarSilencer_OnPluginStart();
     _Load_OnPluginStart();

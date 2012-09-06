@@ -25,6 +25,15 @@
       "4v4"             "teamclerks/4v4.cfg"
       "4v4h"            "teamclerks/4v4h.cfg"
       "skeetpractice"   "teamclerks/skeetpractice.cfg"
+      "pub"             "teamclerks/pub.cfg"
+      
+      // This is the server's default fallback. This is, generally loaded
+      // automatically when the server starts up and when the server 
+      // empties out. You can comment out this line to enable/disable the
+      // auto-loading on startup/empty.
+      // NOTE - The value of DEFAULT must be a key defined above or the
+      //        load will fail.
+      "DEFAULT"         "pub"
     }
   }
 }

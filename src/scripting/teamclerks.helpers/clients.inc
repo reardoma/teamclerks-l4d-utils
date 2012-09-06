@@ -107,3 +107,14 @@ stock Get_Spectator_Player_Count()
     }
     return spectatorPlayerCount;
 }
+
+/**
+ * Determines whether there are any valid player-clients in the server (infected,
+ * survivor, or spectator).
+ */
+stock bool:Server_Has_Player_Clients()
+{
+    return (Get_Spectator_Player_Count() +
+            Get_Survivor_Player_Count() + 
+            Get_Infected_Player_Count()) > 0;
+}

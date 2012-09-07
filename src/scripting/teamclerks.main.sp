@@ -66,30 +66,31 @@
 // **********************************************
 
 // Globals
-#include <sourcemod.inc>
-#include <sdktools.inc>
+#include <sourcemod>
+#include <sdktools>
 
-#include "rotoblin.helpers/debug.inc"
-#include "rotoblin.helpers/cmdmanager.inc"
-#include "rotoblin.helpers/eventmanager.inc"
-#include "rotoblin.helpers/clientindexes.inc"
-#include "rotoblin.helpers/wrappers.inc"
-#include "rotoblin.helpers/tankmanager.inc"
+#include "rotoblin/helpers/debug.inc"
+#include "rotoblin/helpers/cmdmanager.inc"
+#include "rotoblin/helpers/eventmanager.inc"
+#include "rotoblin/helpers/clientindexes.inc"
+#include "rotoblin/helpers/wrappers.inc"
+#include "rotoblin/helpers/tankmanager.inc"
 
-#include "teamclerks.helpers/clients.inc"
-#include "teamclerks.helpers/restartmap.inc"
+#include "teamclerks/helpers/clients.inc"
+#include "teamclerks/helpers/restartmap.inc"
 
-#include "teamclerks.cvarsilencer.sp"
-#include "teamclerks.load.sp"
-#include "teamclerks.skeetpractice.sp"
-#include "teamclerks.1v1.sp"
-#include "teamclerks.teamselect.sp"
-#include "teamclerks.lerps.sp"
+#include "teamclerks/cvarsilencer.sp"
+#include "teamclerks/load.sp"
+#include "teamclerks/skeetpractice.sp"
+#include "teamclerks/1v1.sp"
+#include "teamclerks/teamselect.sp"
+#include "teamclerks/lerps.sp"
 
 // --------------------
 //       Private
 // --------------------
 
+static              bool:   g_bIsZACKLoaded = false;
 
 // **********************************************
 //                      Forwards
@@ -155,7 +156,9 @@ public OnPluginStartEx()
 
     /* Initial setup of modules after event manager is done setting up.
      * To disable certain module, simply comment out the line. */
-    
+
+    // Load the rotoblin helpers
+    _H_TankManager_OnPluginStart();
     _H_ClientIndexes_OnPluginStart();
     _H_CommandManager_OnPluginStart();
     
@@ -185,6 +188,34 @@ public OnPluginStartEx()
     DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Done setting up!");
 }
 
+public OnAllPluginsLoaded()
+{
+    if (LibraryExists("zack")) // If ZACK is loaded on the server
+    {
+        g_bIsZACKLoaded = true;
+    }
+    else
+    {
+        g_bIsZACKLoaded = false;
+    }
+}
+
+public OnLibraryRemoved(const String:name[])
+{
+    if (StrEqual(name, "zack"))
+    {
+        g_bIsZACKLoaded = false;
+    }
+}
+
+public OnLibraryAdded(const String:name[])
+{
+    if (StrEqual(name, "zack"))
+    {
+        g_bIsZACKLoaded = true;
+    }
+}
+
 /**
  * Enable cvar changed.
  *
@@ -207,3 +238,10 @@ public _Main_Enable_CvarChange(Handle:convar, const String:oldValue[], const Str
 
     SetPluginState(bool:StringToInt(newValue));
 }
+
+/**
+ * Returns whether ZACK is loaded.
+ *
+ * @return              True if ZACK is loaded, false otherwise.
+ */
+stock bool:IsZACKLoaded() return g_bIsZACKLoaded;

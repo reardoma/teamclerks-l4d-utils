@@ -14,8 +14,18 @@
   <property name="base" value="." />
   <property name="src" value="${base}/src/scripting" />
   <property name="cfg" value="${base}/src/cfg" />
-  <property name="smcfg" value="${base}/src/gamedata" />
+  <property name="maps" value="${base}/src/maps" />
   <property name="build" value="${base}/build" />
+  <property name="dependencies" value="${base}/dependencies" />
+  <property name="addons" value="${dependencies}/addons" />
+  
+  <!-- Addons -->
+  <property name="stripper" value="${addons}/stripper" />
+  <property name="sourcemod" value="${addons}/sourcemod" />
+  
+  <!-- Sourcemod Specifics -->
+  <property name="sm.extensions" value="${sourcemod}/extensions" />
+  <property name="sm.gamedata" value="${sourcemod}/gamedata" />
   
   <!-- This MUST be overwritten in the build.properties file if you are going to use   -->
   <!-- dist to deploy to your local (testing) server. This should be the base of your  -->
@@ -39,6 +49,15 @@
   <!-- Compile the plugin; the dependee of the entire build/dist process -->
   <target name="compile" depends="-startDescription" description="Compiles the plugin">
     <exec executable="${sourcePawn}" failonerror="true">
+      <arg line="-D${src} &quot;l4dready.sp&quot;" />
+    </exec>
+    <exec executable="${sourcePawn}" failonerror="true">
+      <arg line="-D${src} &quot;l4dscores.sp&quot;" />
+    </exec>
+    <exec executable="${sourcePawn}" failonerror="true">
+      <arg line="-D${src} &quot;rotoblin.main.sp&quot;" />
+    </exec>
+    <exec executable="${sourcePawn}" failonerror="true">
       <arg line="-D${src} &quot;${pluginName}.sp&quot;" />
     </exec>
   </target>
@@ -46,6 +65,9 @@
   <!-- Build the plugin and move it into the build dir; nothing fancy. -->
   <target name="build" depends="compile" description="Builds the plugin">
     <mkdir dir="${build}" />
+    <move file="${src}/l4dready.smx" tofile="${build}/l4dready.smx" />
+    <move file="${src}/l4dscores.smx" tofile="${build}/l4dscores.smx" />
+    <move file="${src}/rotoblin.main.smx" tofile="${build}/rotoblin.smx" />
     <move file="${src}/${pluginName}.smx" tofile="${build}/${plugin}.smx" />
     <antcall target="-outputDescription">
       <param name="outputDir" value="${build}" />
@@ -54,19 +76,33 @@
   
   <!-- Builds and distributes the plugin to a destination server setup (including config files) -->
   <target name="dist" depends="compile" description="Builds and distributes the plugin">
+    <move file="${src}/l4dready.smx" tofile="${dist}/addons/sourcemod/plugins/l4dready.smx" />
+    <move file="${src}/l4dscores.smx" tofile="${dist}/addons/sourcemod/plugins/l4dscores.smx" />
+    <move file="${src}/rotoblin.main.smx" tofile="${dist}/addons/sourcemod/plugins/rotoblin.smx" />
     <move file="${src}/${pluginName}.smx" toFile="${dist}/addons/sourcemod/plugins/${plugin}.smx" />
-    <copy todir="${dist}/cfg/teamclerks">
-      <fileset dir="${cfg}">
+    <copy todir="${dist}/cfg/${plugin}">
+      <fileset dir="${cfg}/${plugin}">
+        <include name="**/*.cfg" />
+      </fileset>
+    </copy>
+    <copy todir="${dist}/cfg">
+      <fileset dir="${cfg}/rotoblin">
+        <include name="**/*.cfg" />
+      </fileset>
+    </copy>
+    <copy todir="${dist}/maps/cfg">
+      <fileset dir="${maps}/cfg">
         <include name="**/*.cfg" />
       </fileset>
     </copy>
     <copy todir="${dist}/addons/sourcemod/gamedata">
-      <fileset dir="${smcfg}">
+      <fileset dir="${sm.gamedata}">
         <include name="**/*.txt" />
       </fileset>
     </copy>
     <antcall target="-outputDescription">
-      <param name="outputDir" value="${dist}" />
+      <param name="outputDir" value="${dist}/addons/sourcemod/plugins" />
+      <param name="movedConfigs" value="true" />
     </antcall>
   </target>
   
@@ -83,18 +119,30 @@
   
   <!-- Boilerplate for describing what is about to happen; called at the begining of the build process -->
   <target name="-startDescription">
-    <echo>------------------------------------------------------------------------</echo>
+    <echo>-------------------------------------------------------------------------------------</echo>
     <echo>- Building ${pluginName}.sp ...</echo>
-    <echo>------------------------------------------------------------------------</echo>
+    <echo>-------------------------------------------------------------------------------------</echo>
   </target>
   
   <!-- Boilerplate for describing what was done; called at the end of the build process -->
   <target name="-outputDescription">
-    <echo>------------------------------------------------------------------------</echo>
+    <echo>-------------------------------------------------------------------------------------</echo>
+    <echo>- Built: l4dready.sp</echo>
+    <echo>-    as: l4dready.smx</echo>
+    <echo>-    in: ${outputDir}</echo>
+    <echo>-</echo>
+    <echo>- Built: l4dscores.sp</echo>
+    <echo>-    as: l4dscores.smx</echo>
+    <echo>-    in: ${outputDir}</echo>
+    <echo>-</echo>
+    <echo>- Built: rotoblin.sp</echo>
+    <echo>-    as: rotoblin.smx</echo>
+    <echo>-    in: ${outputDir}</echo>
+    <echo>-</echo>
     <echo>- Built: ${pluginName}.sp</echo>
     <echo>-    as: ${plugin}.smx</echo>
     <echo>-    in: ${outputDir}</echo>
-    <echo>------------------------------------------------------------------------</echo>
+    <echo>-------------------------------------------------------------------------------------</echo>
   </target>
   
 </project>

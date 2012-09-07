@@ -26,10 +26,8 @@ public Action:Attempt_Swap_To_Survivor(client, const String:command[], argc)
         if (Get_Survivor_Player_Count() < survivorLimit)
         {
             // Can't just swap to survivor... have to take control of a bot.
-            
-            // get survivor botcount and save ids
-            decl botArray[16];
-            new botCount;
+
+            // Get all survivors (bots and players)
             decl survArray[MaxClients];
             new survCount = 0;
             for (new aClient = FIRST_CLIENT; aClient <= MaxClients; aClient++)
@@ -40,6 +38,9 @@ public Action:Attempt_Swap_To_Survivor(client, const String:command[], argc)
                     survCount ++;
                 }
             }
+            // get survivor botcount and save ids
+            decl botArray[16];
+            new botCount;
             for (new i = 0; i < survCount; i++)
             {
                     if (!IsFakeClient(survArray[i])) continue;

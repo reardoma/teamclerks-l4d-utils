@@ -32,6 +32,7 @@ new            bool: hasVoted[MAXPLAYERS+1]       = {false};
 new          String: votingOn[]                   = "";
 new            bool: currentlyVoting              = false;
 new            bool: tallyingVotes                = false;
+new            bool: votePassed                   = false;
 new          Handle: recentVoters[MAXPLAYERS+1];
 new          String: currentlyLoaded[]            = "";
 
@@ -63,7 +64,7 @@ public _Load_OnPluginStart()
     AddCommandListener(_Load_OnClientCommandIssued, "say");
     AddCommandListener(_Load_OnClientCommandIssued, "say_team");
     
-    HookPublicEvent(EVENT_ONCLIENTDISCONNECT_POST, _Load_OnClientDisconnectPost);
+    //HookPublicEvent(EVENT_ONCLIENTDISCONNECT_POST, _Load_OnClientDisconnectPost);
 
     _Load_Load_Default_If_Present();
 }
@@ -156,17 +157,24 @@ public Action:_Load_Tally_Votes(Handle:timer)
     currentlyVoting = false;
     tallyingVotes = true;
     
-    if (_Load_Is_Vote_Passing())
+    if (!votePassed)
     {
-        _Load_Load_Module(votingOn);
-    }
-    else
-    {
-        // Vote failed.
-        PrintToChatAll("Vote failed for module: %s", votingOn);
+        if (_Load_Is_Vote_Passing())
+        {
+            _Load_Load_Module(votingOn);
+        }
+        else
+        {
+            // Vote failed.
+            PrintToChatAll("Vote failed for module: %s", votingOn);
+        }
+        
+        _Load_End_Vote(votingOn);
     }
     
-    _Load_End_Vote(votingOn);
+    votePassed = false;
+    // Maybe EVERYONE voted yes before the timer went off; we need
+    // to just ignore this in that case.
 }
 
 public Action:_Load_Allow_Start_Vote(Handle:timer, Handle:pack)
@@ -322,6 +330,7 @@ _Load_Load_Module(String:target[])
     if (_Load_Check_Module(target, loadable))
     {
         PrintToChatAll("Vote successful; loading module: %s...", target);
+        votePassed = true;
         // Successfully read the target's value from the config file into loadable.
         _Load_End_Vote(target);
         // Load it!

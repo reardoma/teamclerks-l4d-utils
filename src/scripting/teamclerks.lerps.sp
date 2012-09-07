@@ -66,7 +66,6 @@ public _Lerps_OnPluginStart()
     AddCommandListenerEx(Lerps_Cmd, LERPS_CMD);
     
     HookPublicEvent(EVENT_ONCLIENTDISCONNECT_POST, _Lerps_OnClientDisconnect_Post);
-    HookPublicEvent(EVENT_ONCLIENTSETTINGSCHANGED, _Lerps_OnClientSettingsChanged);
     
     ScanAllPlayersLerp();
 }
@@ -77,7 +76,7 @@ public _Lerps_OnClientDisconnect_Post(client)
 }
 
 /* Lerp calculation adapted from hl2sdk's CGameServerClients::OnClientSettingsChanged */
-public _Lerps_OnClientSettingsChanged(client)
+public OnClientSettingsChanged(client)
 {
     if(IsValidEntity(client) &&  !IsFakeClient(client))
     {

@@ -22,7 +22,7 @@
  * Determines if the given client is a valid player-client (as opposed to a 
  * bot or AI infected).
  */
-stock bool:Is_Valid_Client(client)
+stock bool:Is_Valid_Player_Client(client)
 {
     if (client == 0 || 
         !IsClientConnected(client) || 
@@ -34,12 +34,31 @@ stock bool:Is_Valid_Client(client)
     return true;
 }
 
+stock bool:Is_Valid_Client(client)
+{
+    if (client == 0 || 
+        !IsClientConnected(client) || 
+        !IsClientInGame(client))
+    {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Determines if the given client is a survivor (allows for bots).
+ */
+stock bool:Is_Client_Survivor(client)
+{
+    return Is_Valid_Client(client) && GetClientTeam(client) == TEAM_SURVIVOR;
+}
+
 /**
  * Determines if the given client is 1) a valid player-client and 2) a survivor.
  */
-stock bool:Is_Client_Surivor(client)
+stock bool:Is_Client_Player_Surivor(client)
 {
-    return Is_Valid_Client(client) && GetClientTeam(client) == TEAM_SURVIVOR;
+    return Is_Valid_Player_Client(client) && GetClientTeam(client) == TEAM_SURVIVOR;
 }
 
 /**
@@ -51,7 +70,7 @@ stock Get_Survivor_Player_Count()
     new survivorPlayerCount = 0;
     for (new client = FIRST_CLIENT; client <= MaxClients; client++)
     {
-        if (Is_Client_Surivor(client))
+        if (Is_Client_Player_Surivor(client))
         {
             survivorPlayerCount ++;
         }
@@ -62,9 +81,9 @@ stock Get_Survivor_Player_Count()
 /**
  * Determines if the given client is 1) a valid player-client and 2) an infected.
  */
-stock bool:Is_Client_Infected(client)
+stock bool:Is_Client_Player_Infected(client)
 {
-    return Is_Valid_Client(client) && GetClientTeam(client) == TEAM_INFECTED;
+    return Is_Valid_Player_Client(client) && GetClientTeam(client) == TEAM_INFECTED;
 }
 
 /**
@@ -76,7 +95,7 @@ stock Get_Infected_Player_Count()
     new infectedPlayerCount = 0;
     for (new client = FIRST_CLIENT; client <= MaxClients; client++)
     {
-        if (Is_Client_Infected(client))
+        if (Is_Client_Player_Infected(client))
         {
             infectedPlayerCount ++;
         }
@@ -87,9 +106,9 @@ stock Get_Infected_Player_Count()
 /**
  * Determines if the given client is 1) a valid player-client and 2) a spectator.
  */
-stock bool:Is_Client_Spectator(client)
+stock bool:Is_Client_Player_Spectator(client)
 {
-    return Is_Valid_Client(client) && GetClientTeam(client) == TEAM_SPECTATOR;
+    return Is_Valid_Player_Client(client) && GetClientTeam(client) == TEAM_SPECTATOR;
 }
 
 /**
@@ -100,7 +119,7 @@ stock Get_Spectator_Player_Count()
     new spectatorPlayerCount = 0;
     for (new client = FIRST_CLIENT; client <= MaxClients; client++)
     {
-        if (Is_Client_Spectator(client))
+        if (Is_Client_Player_Spectator(client))
         {
             spectatorPlayerCount ++;
         }

@@ -7,7 +7,7 @@
  * module to module) that I would prefer clients not be bother with.
  */
 
-#define NUM_CVARS 50
+#define NUM_CVARS 57
 
 new String:cvars[NUM_CVARS][64] = {
     "vs_max_team_switches",            "sb_all_bot_team",                 "director_no_survivor_bots",         "survivor_limit",
@@ -22,7 +22,9 @@ new String:cvars[NUM_CVARS][64] = {
     "director_gas_can_density",        "director_oxygen_tank_density",    "director_molotov_density",          "director_pipe_bomb_density",
     "director_pistol_density",         "z_ghost_delay_max",               "z_ghost_delay_min",                 "tank_stuck_time_suicide",
     "director_min_start_players",      "mp_logdetail",                    "fps_max",                           "sv_minupdaterate",
-    "sv_maxupdaterate",                "sv_client_min_interp_ratio"
+    "sv_maxupdaterate",                "sv_client_min_interp_ratio",      "rotoblin_enable",                   "rotoblin_health_style",
+    "rotoblin_interp_min",             "rotoblin_interp_max",             "rotoblin_enable_throwables",        "rotoblin_enable_cannisters",
+    "sv_alltalk"
 };
 
 public _CvarSilencer_OnPluginStart()

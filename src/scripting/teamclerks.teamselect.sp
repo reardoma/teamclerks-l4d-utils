@@ -21,12 +21,57 @@ public Action:Attempt_Swap_To_Survivor(client, const String:command[], argc)
 {
     new survivorLimit = GetConVarInt(FindConVar("survivor_limit"));
     
-    if (!Is_Client_Surivor(client))
+    if (!Is_Client_Player_Surivor(client))
     {
         if (Get_Survivor_Player_Count() < survivorLimit)
         {
-            ChangeClientTeam(client, TEAM_SURVIVOR);
-            return Plugin_Handled;
+            // Can't just swap to survivor... have to take control of a bot.
+            
+            // get survivor botcount and save ids
+            decl botArray[16];
+            new botCount;
+            decl survArray[MaxClients];
+            new survCount = 0;
+            for (new aClient = FIRST_CLIENT; aClient <= MaxClients; aClient++)
+            {
+                if (Is_Client_Survivor(aClient))
+                {
+                    survArray[survCount] = aClient;
+                    survCount ++;
+                }
+            }
+            for (new i = 0; i < survCount; i++)
+            {
+                    if (!IsFakeClient(survArray[i])) continue;
+                    botArray[botCount] = survArray[i];
+                    botCount++;
+            }
+            
+            // A bot might not be there by here... oh well
+            if (botCount == 0)
+            {
+                ReplyToCommand(client, "Survivor player-limit reached.");
+                return Plugin_Continue;
+            }
+
+            new flags = GetCommandFlags("sb_takecontrol");
+            decl String:survivor[MAX_NAME_LENGTH];
+            GetClientName(botArray[0], survivor, MAX_NAME_LENGTH);
+            
+            // take the first bot
+            if (IsClientInGame(botArray[0]) && IsClientInGame(client))
+            {
+                // Turn this off as a cheat
+                SetCommandFlags("sb_takecontrol", flags & ~FCVAR_CHEAT);
+                FakeClientCommandEx(client, "sb_takecontrol %s", survivor);
+                // Turn this back on as a cheat
+                SetCommandFlags("sb_takecontrol", flags | FCVAR_CHEAT);
+                
+                return Plugin_Handled;
+            }
+            
+            // Oh well, they left or the bot's full...
+            return Plugin_Continue;
         }
     
         ReplyToCommand(client, "Survivor player-limit reached.");
@@ -42,7 +87,7 @@ public Action:Attempt_Swap_To_Infected(client, const String:command[], argc)
 {
     new infectedLimit = GetConVarInt(FindConVar("z_max_player_zombies"));
     
-    if (!Is_Client_Infected(client))
+    if (!Is_Client_Player_Infected(client))
     {
         if (Get_Infected_Player_Count() < infectedLimit)
         {
@@ -61,7 +106,7 @@ public Action:Attempt_Swap_To_Infected(client, const String:command[], argc)
  */
 public Action:Swap_To_Spectator(client, const String:command[], argc)
 {
-    if (!Is_Client_Spectator(client))
+    if (!Is_Client_Player_Spectator(client))
     {
         ChangeClientTeam(client, TEAM_SPECTATOR);
         return Plugin_Handled;

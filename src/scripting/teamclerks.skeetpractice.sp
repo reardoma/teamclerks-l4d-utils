@@ -147,7 +147,7 @@ public Action:_SP_healPouncedSurvivor(Handle:timer, Handle:pack)
     if (IsClientInGame(survivorClient))
     {
         // Make the survivor give himself some health
-        FakeClientCommand(survivorClient, "give health");
+        FakeClientCommandEx(survivorClient, "give health");
     }
     // QUICK, turn it back on as a cheat
     SetCommandFlags("give", flags | FCVAR_CHEAT);

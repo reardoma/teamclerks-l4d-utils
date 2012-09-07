@@ -163,15 +163,9 @@ CommandSkeetPracticeStart()
 {
     // Hook the pounce event up.
     HookEvent("lunge_pounce", _SP_Event_PlayerPounced);
-    
-    PrintToChatAll("[SM] Skeet practice loaded.");
-    
-    RestartMapIn(5.0);
 }
 
 CommandSkeetPracticeStop()
 {    
     UnhookEvent("lunge_pounce", _SP_Event_PlayerPounced);
-    
-    PrintToChatAll("[SM] Skeet practice unloaded.");
 }

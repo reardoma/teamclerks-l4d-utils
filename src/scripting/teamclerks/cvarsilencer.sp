@@ -45,12 +45,12 @@ SilenceCvar(const String:cvar[64])
         flags &= ~FCVAR_NOTIFY;
         SetConVarFlags(cvarH, flags);
         
-        PrintToServer("Set cvar to not notify: %s", cvar);
+        TC_Debug("Not notify: %s", cvar);
         
         CloseHandle(cvarH);
     }
     else
     {
-        PrintToServer("Invalid cvar: %s", cvar);
+        TC_Debug("Invalid cvar: %s", cvar);
     }
 }

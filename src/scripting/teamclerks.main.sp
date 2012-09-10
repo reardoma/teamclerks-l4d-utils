@@ -39,6 +39,9 @@
 //                   Reference
 // **********************************************
 
+#define TC_DEBUG                1 // Whether debugging is enabled
+#define TC_DEBUG_SERVER         0 // Whether debugging goes to the server console (1) or the file log (0)
+
 #define SERVER_INDEX            0 // The client index of the server
 #define FIRST_CLIENT            1 // First valid client index
 
@@ -90,7 +93,7 @@
 //       Private
 // --------------------
 
-static              bool:   g_bIsZACKLoaded = false;
+static            bool: g_bIsZACKLoaded      = false;
 
 // **********************************************
 //                      Forwards
@@ -142,7 +145,7 @@ public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max)
  */
 public OnPluginStartEx()
 {
-    DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Setting up...");
+    TC_Debug("Setting up...");
 
     decl String:buffer[128];
     Format(buffer, sizeof(buffer), "%s version", PLUGIN_FULLNAME);
@@ -177,7 +180,7 @@ public OnPluginStartEx()
     if (GetConVarBool(convar) && !IsDedicatedServer())
     {
         SetConVarBool(convar, false);
-        DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Unable to enable teamclerks, running on a listen server!");
+        TC_Debug("Unable to enable teamclerks, running on a listen server!");
     }
     else
     {
@@ -185,7 +188,7 @@ public OnPluginStartEx()
     }
 
     HookConVarChange(convar, _Main_Enable_CvarChange);
-    DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Done setting up!");
+    TC_Debug("Done setting up!");
 }
 
 public OnAllPluginsLoaded()
@@ -226,12 +229,12 @@ public OnLibraryAdded(const String:name[])
  */
 public _Main_Enable_CvarChange(Handle:convar, const String:oldValue[], const String:newValue[])
 {
-    DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Enable cvar was changed. Old value %s, new value %s", oldValue, newValue);
+    TC_Debug("Enable cvar was changed. Old value %s, new value %s", oldValue, newValue);
 
     if (GetConVarBool(convar) && !IsDedicatedServer())
     {
         SetConVarBool(convar, false);
-        DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Unable to enable teamclerks, running on a listen server!");
+        TC_Debug("Unable to enable teamclerks, running on a listen server!");
         PrintToChatAll("[%s] Unable to enable %s! %s only support dedicated servers", PLUGIN_TAG, PLUGIN_FULLNAME, PLUGIN_FULLNAME);
         return;
     }
@@ -245,3 +248,28 @@ public _Main_Enable_CvarChange(Handle:convar, const String:oldValue[], const Str
  * @return              True if ZACK is loaded, false otherwise.
  */
 stock bool:IsZACKLoaded() return g_bIsZACKLoaded;
+
+/**
+ * Helper method for rendering debug statements.
+ */
+TC_Debug(const String:format[], any:...)
+{
+    #if TC_DEBUG
+    decl String:buffer[192];
+    
+    VFormat(buffer, sizeof(buffer), format, 2);
+    
+    #if TC_DEBUG_SERVER
+    PrintToServer("%s", buffer);
+    #else
+    LogMessage("%s", buffer);
+    #endif
+    
+    #else
+    //suppress "format" never used warning
+    if(format[0])
+        return;
+    else
+        return;
+    #endif
+}

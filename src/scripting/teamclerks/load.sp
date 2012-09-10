@@ -66,7 +66,7 @@ public _Load_OnPluginStart()
     
     //HookPublicEvent(EVENT_ONCLIENTDISCONNECT_POST, _Load_OnClientDisconnectPost);
 
-    _Load_Load_Default_If_Present();
+    //_Load_Load_Default_If_Present();
 }
 
 public _Load_OnClientDisconnectPost(client)
@@ -301,6 +301,7 @@ _Load_Start_Vote(client, String:target[])
     GetClientName(client, nick, sizeof(nick));
     
     PrintToChatAll("%s has started a vote for: %s ", nick, target);
+    PrintToChatAll("Type \"!%s\" to cast a vote in favor of this config load.", target);
     
     // If we're the only player, then it should load.
     if (_Load_Is_Vote_Passing(true))

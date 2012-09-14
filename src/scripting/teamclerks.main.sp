@@ -57,7 +57,7 @@
 #define PLUGIN_SHORTNAME        "teamclerks"                                    // Shorter version of the full name, used in file paths, and other things
 #define PLUGIN_AUTHOR           "kain"                                          // Author of the plugin
 #define PLUGIN_DESCRIPTION      "A handful of utility plugins for L4D"          // Description of the plugin
-#define PLUGIN_VERSION          "0.1.3"                                         // http://wiki.eclipse.org/Version_Numbering
+#define PLUGIN_VERSION          "0.1.4"                                         // http://wiki.eclipse.org/Version_Numbering
 #define PLUGIN_URL              "http://teamclerks-l4d-utils.googlecode.com/"   // URL associated with the project
 #define PLUGIN_CVAR_PREFIX      PLUGIN_SHORTNAME                                // Prefix for cvars
 #define PLUGIN_CMD_PREFIX       PLUGIN_SHORTNAME                                // Prefix for cmds

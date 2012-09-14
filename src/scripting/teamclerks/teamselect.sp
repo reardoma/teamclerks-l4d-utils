@@ -2,19 +2,12 @@
  * TeamSelect allows a player-client to issue commands to swap teams
  * even when team-switching has reached its limit.
  */
-
-new Handle:gConf = INVALID_HANDLE;
-new Handle:fSHS = INVALID_HANDLE;
-new Handle:fTOB = INVALID_HANDLE;
-
 static const String: TEAM_SELECT_SURVIVOR[]       = "surv";
 static const String: TEAM_SELECT_INFECTED[]       = "inf";
 static const String: TEAM_SELECT_SPECTATOR[]      = "spec";
 
 public _TeamSelect_OnPluginStart()
-{
-    PrepareAllSDKCalls();
-    
+{    
     AddCommandListenerEx(Attempt_Swap_To_Survivor, TEAM_SELECT_SURVIVOR);
     AddCommandListenerEx(Attempt_Swap_To_Infected, TEAM_SELECT_INFECTED);
     AddCommandListenerEx(Swap_To_Spectator, TEAM_SELECT_SPECTATOR);
@@ -25,70 +18,61 @@ public _TeamSelect_OnPluginStart()
  */
 public Action:Attempt_Swap_To_Survivor(client, const String:command[], argc)
 {
-    new survivorLimit = GetConVarInt(FindConVar("survivor_limit"));
+    new maxSurvivorSlots = Get_Team_Max_Humans(2);
+    new survivorUsedSlots = Get_Team_Human_Count(2);
+    new freeSurvivorSlots = (maxSurvivorSlots - survivorUsedSlots);
+    //debug
+    //PrintToChatAll("Number of Survivor Slots %d.\nNumber of Survivor Players %d.\nNumber of Free Slots %d.", maxSurvivorSlots, survivorUsedSlots, freeSurvivorSlots);
     
-    if (!Is_Client_Player_Surivor(client))
+    if (GetClientTeam(client) == 2)         //if client is survivor
     {
-        if (Get_Survivor_Player_Count() < survivorLimit)
-        {
-            // Can't just swap to survivor... have to take control of a bot.
-            TC_Debug("Attempting bot takeover...");
-            // Get all survivors (bots and players)
-            decl survArray[MaxClients];
-            new survCount = 0;
-            for (new aClient = FIRST_CLIENT; aClient <= MaxClients; aClient++)
-            {
-                if (Is_Client_Survivor(aClient))
-                {
-                    survArray[survCount] = aClient;
-                    survCount ++;
-                }
-            }
-            // get survivor botcount and save ids
-            decl botArray[16];
-            new botCount;
-            for (new i = 0; i < survCount; i++)
-            {
-                    if (!IsFakeClient(survArray[i])) continue;
-                    botArray[botCount] = survArray[i];
-                    botCount++;
-            }
-            
-            // A bot might not be there by here... oh well
-            if (botCount == 0)
-            {
-                ReplyToCommand(client, "Survivor player-limit reached.");
-                return Plugin_Continue;
-            }
-            
-            TC_Debug("Bot exists from which to take control.");
-
-            decl String:survivor[MAX_NAME_LENGTH];
-            GetClientName(botArray[0], survivor, MAX_NAME_LENGTH);
-            
-            // take the first bot
-            if (IsClientInGame(botArray[0]) && IsClientInGame(client))
-            {
-                decl String:clientname[64];
-                GetClientName(client, clientname, sizeof(clientname));
-                TC_Debug("Moving %s to survivor team.", clientname);
-                //have to do this to give control of a survivor bot
-                SDKCall(fSHS, botArray[0], client);
-                SDKCall(fTOB, client, true);
-
-                TC_Debug("Bot takeover completed.");
-                
-                return Plugin_Handled;
-            }
-            
-            // Oh well, they left or the bot's full...
-            return Plugin_Continue;
-        }
-    
-        ReplyToCommand(client, "Survivor player-limit reached.");
+        PrintToChat(client, "[SM] You are already on the Survivor team.");
+        return Plugin_Handled;
     }
-    
-    return Plugin_Continue;
+    if (freeSurvivorSlots <= 0)
+    {
+        PrintToChat(client, "[SM] Survivor team is full.");
+        return Plugin_Handled;
+    }
+    else
+    {
+        new bot;
+        
+        for(bot = 1; 
+            bot < (MaxClients + 1) && (!IsClientConnected(bot) || !IsFakeClient(bot) || (GetClientTeam(bot) != L4D_TEAM_SURVIVOR));
+            bot++) {}
+        
+        if(bot == (MaxClients + 1))
+        {           
+            new String:newCommand[] = "sb_add";
+            new flags = GetCommandFlags(newCommand);
+            SetCommandFlags(newCommand, flags & ~FCVAR_CHEAT);
+            
+            ServerCommand("sb_add");
+            
+            SetCommandFlags(newCommand, flags);
+        }
+        CreateTimer(0.1, Survivor_Take_Control, client, TIMER_FLAG_NO_MAPCHANGE);
+    }
+    return Plugin_Handled;
+}
+
+public Action:Survivor_Take_Control(Handle:timer, any:client)
+{
+        new localClientTeam = GetClientTeam(client);
+        new String:command[] = "sb_takecontrol";
+        new flags = GetCommandFlags(command);
+        SetCommandFlags(command, flags & ~FCVAR_CHEAT);
+        new String:botNames[][] = { "teengirl", "manager", "namvet", "biker" };
+        
+        new i = 0;
+        while((localClientTeam != L4D_TEAM_SURVIVOR) && i < 4)
+        {
+            FakeClientCommand(client, "sb_takecontrol %s", botNames[i]);
+            localClientTeam = GetClientTeam(client);
+            i++;
+        }
+        SetCommandFlags(command, flags);
 }
 
 /**
@@ -130,23 +114,4 @@ public Action:Swap_To_Spectator(client, const String:command[], argc)
     }
     
     return Plugin_Continue;
-}
-
-PrepareAllSDKCalls()
-{
-    gConf = LoadGameConfigFile("left4downtown");
-    if(gConf == INVALID_HANDLE)
-    {
-        TC_Debug("Could not load gamedata/left4downtown.txt");
-    }
-    
-    StartPrepSDKCall(SDKCall_Player);
-    PrepSDKCall_SetFromConf(gConf, SDKConf_Signature, "SetHumanSpec");
-    PrepSDKCall_AddParameter(SDKType_CBasePlayer, SDKPass_Pointer);
-    fSHS = EndPrepSDKCall();
-    
-    StartPrepSDKCall(SDKCall_Player);
-    PrepSDKCall_SetFromConf(gConf, SDKConf_Signature, "TakeOverBot");
-    PrepSDKCall_AddParameter(SDKType_Bool, SDKPass_Plain);
-    fTOB = EndPrepSDKCall();
 }

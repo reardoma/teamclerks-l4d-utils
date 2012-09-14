@@ -117,13 +117,57 @@ public Action:_1v1_killPouncedHunter(Handle:timer, Handle:pack)
     _1v1_HunterSurvivor[hunterClient] = INVALID_HANDLE;
 }
 
+public Action:_1v1_Event_AbilityUsed(Handle:event, const String:name[], bool:dontBroadcast)
+{
+    new Client = GetClientOfUserId(GetEventInt(event, "userid"));
+    new String:AbilityName[64];
+    
+    GetEventString(event, "ability", AbilityName, sizeof(AbilityName));
+    if(Is_Client_Player_Infected(Client) && strcmp(AbilityName, "ability_lunge", false) == 0) //pouncing
+    {
+        ForcePlayerSuicide(Client);
+        PrintToChatAll("[1v1] Blocked %N from wallkicking.", Client);
+        return Plugin_Stop;
+    }
+    
+    return Plugin_Continue;
+}
+
+public Action:_1v1_groundTouchTimer(Handle:timer, any:client)
+{
+    if((Is_Valid_Player_Client(client) && (GetEntProp(client, Prop_Data, "m_fFlags") & FL_ONGROUND) > 0) 
+            || !Is_Client_Player_Infected(client))
+    {
+        UnhookEvent("ability_use", _1v1_Event_AbilityUsed);
+        KillTimer(timer);
+    }
+    
+    return Plugin_Continue;
+}
+
+public Action:_1v1_Event_PlayerJump(Handle:event, const String:name[], bool:dontBroadcast)
+{
+    new client = GetClientOfUserId(GetEventInt(event, "userid"));
+    
+    // is not using normal wall pounce (using wallkick)
+    if(Is_Client_Player_Infected(client) && (GetClientButtons(client) & IN_JUMP))
+    {
+        HookEvent("ability_use", _1v1_Event_AbilityUsed);
+        CreateTimer(0.5, _1v1_groundTouchTimer, client, TIMER_REPEAT);
+    }
+    
+    return Plugin_Continue;
+}
+
 Command1v1Start()
 {
     // Hook the pounce event up.
     HookEvent("lunge_pounce", _1v1_Event_PlayerPounced);
+    HookEvent("player_jump", _1v1_Event_PlayerJump);
 }
 
 Command1v1Stop()
 {
     UnhookEvent("lunge_pounce", _1v1_Event_PlayerPounced);
+    UnhookEvent("player_jump", _1v1_Event_PlayerJump);
 }

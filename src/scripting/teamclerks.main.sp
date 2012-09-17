@@ -43,12 +43,6 @@
 #define TC_DEBUG_SERVER         0 // Whether debugging goes to the server console (1) or the file log (0)
 
 #define SERVER_INDEX            0 // The client index of the server
-#define FIRST_CLIENT            1 // First valid client index
-
-// The team list
-#define TEAM_SPECTATOR          1
-#define TEAM_SURVIVOR           2
-#define TEAM_INFECTED           3
 
 #define MAX_ENTITIES            2048 // Max number of entities l4d supports
 

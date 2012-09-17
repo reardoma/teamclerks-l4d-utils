@@ -327,7 +327,7 @@ static HookAllPropPhysics()
 {
 	UnhookAllPropPhysics();
 
-	for (new entity = FIRST_CLIENT; entity <= MAX_ENTITIES; entity++)
+	for (new entity = 1; entity <= MAX_ENTITIES; entity++)
 	{
 		if (!IsValidTankProp(entity)) continue;
 

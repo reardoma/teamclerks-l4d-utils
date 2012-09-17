@@ -81,7 +81,7 @@ public _SB_OnPluginEnabled()
 
 	g_hClientSettings = CreateTrie(); // Create trie to store client settings
 
-	for (new i = FIRST_CLIENT; i < MaxClients; i++)
+	for (new i = 1; i < MaxClients; i++)
 	{
 		g_bShowHUD[i] = false;
 	}
@@ -177,7 +177,7 @@ public Action:_SB_ShowHud_Command(client, const String:command[], argc)
  */
 public _SB_RoundStart_Event(Handle:event, const String:name[], bool:dontBroadcast)
 {
-	for (new i = FIRST_CLIENT; i <= MaxClients; i++) g_bHavePrintedTip[i] = false;
+	for (new i = 1; i <= MaxClients; i++) g_bHavePrintedTip[i] = false;
 	ResetHUD();
 }
 

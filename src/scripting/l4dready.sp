@@ -1545,62 +1545,11 @@ DrawReadyPanelList()
     DrawPanelText(panel, Notice);
 #endif
     
-//    new String:versionInfo[128];
-//    new String:sCFGName[128];
-//    GetConVarString(cvarCFGName, sCFGName, sizeof(sCFGName));
-//    if (scrollingText)
-//    {
-//        Format(versionInfo, 128, "Made by Downtown1 & Frustian");
-//    }
-//    else
-//    {
-//        Format(versionInfo, 128, "Ready Up Modification v%s", READY_VERSION);
-//    }
-//    scrollingText = !scrollingText;
-//    DrawPanelText(panel, versionInfo);
-//    
-//    //#if CEVO_ADD_NOTICE
-//    if (sCFGName[0])
-//    {
-//        DrawPanelText(panel, sCFGName);
-//    }
-//    //#endif
-    
     for (i = 1; i < L4D_MAXCLIENTS_PLUS1; i++) 
     {
-        if(Is_Client_Player_Spectator(i)) 
+        if(Is_Valid_Player_Client(i)) 
         {
             SendPanelToClient(panel, i, Menu_ReadyPanel, READY_LIST_PANEL_LIFETIME);
-            
-            /*
-            //some other menu was open during this time?
-            if(menuInterrupted[i])
-            {
-                //if the menu is still up, dont refresh
-                if(GetClientMenu(i))
-                {
-                    DebugPrintToAll("MENU: Will not draw to %N, has menu open (and its not ours)", i);
-                    continue;
-                }
-                else
-                {
-                    menuInterrupted[i] = false;
-                }
-            }
-            //send to client if he doesnt have menu already
-            //this menu will be refreshed automatically from timeout callback
-            if(!GetClientMenu(i))
-                SendPanelToClient(panel, i, Menu_ReadyPanel, READY_LIST_PANEL_LIFETIME);
-            else
-                DebugPrintToAll("MENU: Will not draw to %N, has menu open (and it could be ours)", i);
-            */
-            
-            /*
-            #if READY_DEBUG
-            PrintToChat(i, "[DEBUG] You have been sent the Panel.");
-            #endif
-            */
-            
         }
     }
     

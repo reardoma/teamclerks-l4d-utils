@@ -33,6 +33,8 @@
 #endif
 #define _helper_clientindexes
 
+#include "teamclerks/helpers/clients.inc"
+
 // --------------------
 //       Public
 // --------------------
@@ -189,7 +191,7 @@ static RebuildIndex()
 	if (!IsServerProcessing()) return;
 
 	decl team;
-	for (new i = FIRST_CLIENT; i <= MaxClients; i++)
+	for (new i = 1; i <= MaxClients; i++)
 	{
 		if (!IsClientInGame(i)) continue;
 

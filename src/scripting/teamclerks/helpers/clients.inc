@@ -12,16 +12,16 @@
  * ============================================================================
  */
 
-// The team list
-#define L4D_TEAM_SPECTATOR 1
-#define L4D_TEAM_SURVIVOR  2
-#define L4D_TEAM_INFECTED  3
-
 // Don't let the script be included more than once.
 #if defined _teamclerks_helper_clients
   #endinput
 #endif
 #define _teamclerks_helper_clients
+
+// The team list
+#define TEAM_SPECTATOR 1
+#define TEAM_SURVIVOR  2
+#define TEAM_INFECTED  3
 
 /**
  * Determines if the given client is a valid player-client (as opposed to a 
@@ -39,6 +39,18 @@ stock bool:Is_Valid_Player_Client(client)
     return true;
 }
 
+/**
+ * Determines if the given client is a valid client, but NOT a valid player 
+ * client, which would mean that the given client is a bot.
+ */
+stock bool:Is_Valid_Bot_Client(client)
+{
+    return Is_Valid_Client(client) && !Is_Valid_Player_Client(client);
+}
+
+/**
+ * Determines if the given client is valid (Must be a bot or a player).
+ */
 stock bool:Is_Valid_Client(client)
 {
     if (client == 0 || 
@@ -55,15 +67,15 @@ stock bool:Is_Valid_Client(client)
  */
 stock bool:Is_Client_Survivor(client)
 {
-    return Is_Valid_Client(client) && GetClientTeam(client) == L4D_TEAM_SURVIVOR;
+    return Is_Valid_Client(client) && GetClientTeam(client) == TEAM_SURVIVOR;
 }
 
 /**
  * Determines if the given client is 1) a valid player-client and 2) a survivor.
  */
-stock bool:Is_Client_Player_Surivor(client)
+stock bool:Is_Client_Player_Survivor(client)
 {
-    return Is_Valid_Player_Client(client) && GetClientTeam(client) == L4D_TEAM_SURVIVOR;
+    return Is_Valid_Player_Client(client) && GetClientTeam(client) == TEAM_SURVIVOR;
 }
 
 /**
@@ -73,9 +85,9 @@ stock bool:Is_Client_Player_Surivor(client)
 stock Get_Survivor_Player_Count()
 {
     new survivorPlayerCount = 0;
-    for (new client = FIRST_CLIENT; client <= MaxClients; client++)
+    for (new client = 1; client <= MaxClients; client++)
     {
-        if (Is_Client_Player_Surivor(client))
+        if (Is_Client_Player_Survivor(client))
         {
             survivorPlayerCount ++;
         }
@@ -88,7 +100,7 @@ stock Get_Survivor_Player_Count()
  */
 stock bool:Is_Client_Player_Infected(client)
 {
-    return Is_Valid_Player_Client(client) && GetClientTeam(client) == L4D_TEAM_INFECTED;
+    return Is_Valid_Player_Client(client) && GetClientTeam(client) == TEAM_INFECTED;
 }
 
 /**
@@ -98,7 +110,7 @@ stock bool:Is_Client_Player_Infected(client)
 stock Get_Infected_Player_Count()
 {
     new infectedPlayerCount = 0;
-    for (new client = FIRST_CLIENT; client <= MaxClients; client++)
+    for (new client = 1; client <= MaxClients; client++)
     {
         if (Is_Client_Player_Infected(client))
         {
@@ -113,7 +125,7 @@ stock Get_Infected_Player_Count()
  */
 stock bool:Is_Client_Player_Spectator(client)
 {
-    return Is_Valid_Player_Client(client) && GetClientTeam(client) == L4D_TEAM_SPECTATOR;
+    return Is_Valid_Player_Client(client) && GetClientTeam(client) == TEAM_SPECTATOR;
 }
 
 /**
@@ -122,7 +134,7 @@ stock bool:Is_Client_Player_Spectator(client)
 stock Get_Spectator_Player_Count()
 {
     new spectatorPlayerCount = 0;
-    for (new client = FIRST_CLIENT; client <= MaxClients; client++)
+    for (new client = 1; client <= MaxClients; client++)
     {
         if (Is_Client_Player_Spectator(client))
         {
@@ -144,48 +156,23 @@ stock bool:Server_Has_Player_Clients()
 }
 
 /**
- * Determines if the client is in-game and not a bot and not spec
- */
-stock bool:Is_Client_Player_Non_Spec(client)
-{
-    return IsClientInGame(client) && 
-           !IsFakeClient(client) && 
-           ((GetClientTeam(client) == L4D_TEAM_SURVIVOR || 
-             GetClientTeam(client) == L4D_TEAM_INFECTED));
-}
-
-/**
  * Determines the number of maximum human players for a given team.
  */
 stock Get_Team_Max_Humans(team)
 {
-    if(team == L4D_TEAM_SURVIVOR)
-    {
-        return GetConVarInt(FindConVar("survivor_limit"));
-    }
-    else if(team == L4D_TEAM_INFECTED)
-    {
-        return GetConVarInt(FindConVar("z_max_player_zombies"));
-    }
+    new survivorLimit = GetConVarInt(FindConVar("survivor_limit"));
+    new infectedLimit = GetConVarInt(FindConVar("z_max_player_zombies"));
+    new spectatorLimit = GetConVarInt(FindConVar("maxplayers")) - 
+            (survivorLimit + infectedLimit);
     
-    return -1;
-}
-
-/**
- * Determines the number of humans on a given team.
- */
-stock Get_Team_Human_Count(team)
-{
-    new humans = 0;
-    
-    new i;
-    for(i = 1; i < (MaxClients + 1); i++)
+    if(team == TEAM_SURVIVOR)
     {
-        if(Is_Client_Player_Non_Spec(i) && GetClientTeam(i) == team)
-        {
-            humans++;
-        }
+        return survivorLimit;
+    }
+    else if(team == TEAM_INFECTED)
+    {
+        return infectedLimit;
     }
     
-    return humans;
+    return spectatorLimit;
 }

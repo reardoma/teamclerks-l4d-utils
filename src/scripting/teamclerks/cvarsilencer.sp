@@ -7,6 +7,12 @@
  * module to module) that I would prefer clients not be bother with.
  */
 
+// Don't let the script be included more than once.
+#if defined _teamclerks_cvarsilencer
+  #endinput
+#endif
+#define _teamclerks_cvarsilencer
+
 #define NUM_CVARS 57
 
 new String:cvars[NUM_CVARS][64] = {

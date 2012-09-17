@@ -31,6 +31,8 @@
 #endif
 #define _helper_tankmgr
 
+#include "teamclerks/helpers/clients.inc"
+
 // --------------------
 //       Public
 // --------------------
@@ -374,7 +376,7 @@ stock bool:UnhookTankEvent(const TANK_EVENT_TYPE:type, const Function:func)
  */
 static FindTankClient()
 {
-	for (new client = FIRST_CLIENT; client <= MaxClients; client++) // Start loop to find the tank, if any
+	for (new client = 1; client <= MaxClients; client++) // Start loop to find the tank, if any
 	{
 		if (!IsClientInGame(client) ||												// or client is not ingame
 			GetClientTeam(client) != TEAM_INFECTED ||								// or client isn't infected

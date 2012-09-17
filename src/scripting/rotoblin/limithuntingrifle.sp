@@ -203,7 +203,7 @@ static GetActiveHuntingRifles()
 	new weapon;
 	decl String:classname[128];
 	new count;
-	for (new client = FIRST_CLIENT; client <= MaxClients; client++)
+	for (new client = 1; client <= MaxClients; client++)
 	{
 		if (!IsClientInGame(client) || GetClientTeam(client) != TEAM_SURVIVOR || !IsPlayerAlive(client)) continue;
 		weapon = GetPlayerWeaponSlot(client, 0); // Get primary weapon

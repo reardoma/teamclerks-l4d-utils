@@ -1,3 +1,9 @@
+// Don't let the script be included more than once.
+#if defined _teamclerks_skeetpractice
+  #endinput
+#endif
+#define _teamclerks_skeetpractice
+
 // --------------------
 //     Private
 // --------------------

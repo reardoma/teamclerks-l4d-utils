@@ -23,6 +23,12 @@
  * 
  */
 
+// Don't let the script be included more than once.
+#if defined _teamclerks_load
+  #endinput
+#endif
+#define _teamclerks_load
+
 #define VOTE_THRESHOLD 0.5
 
 // --------------------

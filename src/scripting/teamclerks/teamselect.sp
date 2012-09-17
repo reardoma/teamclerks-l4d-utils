@@ -2,6 +2,13 @@
  * TeamSelect allows a player-client to issue commands to swap teams
  * even when team-switching has reached its limit.
  */
+
+// Don't let the script be included more than once.
+#if defined _teamclerks_teamselect
+  #endinput
+#endif
+#define _teamclerks_teamselect
+
 static const String: TEAM_SELECT_SURVIVOR[]       = "surv";
 static const String: TEAM_SELECT_INFECTED[]       = "inf";
 static const String: TEAM_SELECT_SPECTATOR[]      = "spec";
@@ -18,13 +25,11 @@ public _TeamSelect_OnPluginStart()
  */
 public Action:Attempt_Swap_To_Survivor(client, const String:command[], argc)
 {
-    new maxSurvivorSlots = Get_Team_Max_Humans(2);
-    new survivorUsedSlots = Get_Team_Human_Count(2);
+    new maxSurvivorSlots = Get_Team_Max_Humans(TEAM_SURVIVOR);
+    new survivorUsedSlots = Get_Survivor_Player_Count();
     new freeSurvivorSlots = (maxSurvivorSlots - survivorUsedSlots);
-    //debug
-    //PrintToChatAll("Number of Survivor Slots %d.\nNumber of Survivor Players %d.\nNumber of Free Slots %d.", maxSurvivorSlots, survivorUsedSlots, freeSurvivorSlots);
-    
-    if (GetClientTeam(client) == 2)         //if client is survivor
+
+    if (GetClientTeam(client) == TEAM_SURVIVOR)
     {
         PrintToChat(client, "[SM] You are already on the Survivor team.");
         return Plugin_Handled;
@@ -36,43 +41,21 @@ public Action:Attempt_Swap_To_Survivor(client, const String:command[], argc)
     }
     else
     {
-        new bot;
-        
-        for(bot = 1; 
-            bot < (MaxClients + 1) && (!IsClientConnected(bot) || !IsFakeClient(bot) || (GetClientTeam(bot) != L4D_TEAM_SURVIVOR));
-            bot++) {}
-        
-        if(bot == (MaxClients + 1))
-        {           
-            new String:newCommand[] = "sb_add";
-            new flags = GetCommandFlags(newCommand);
-            SetCommandFlags(newCommand, flags & ~FCVAR_CHEAT);
-            
-            ServerCommand("sb_add");
-            
-            SetCommandFlags(newCommand, flags);
-        }
-        CreateTimer(0.1, Survivor_Take_Control, client, TIMER_FLAG_NO_MAPCHANGE);
-    }
-    return Plugin_Handled;
-}
-
-public Action:Survivor_Take_Control(Handle:timer, any:client)
-{
         new localClientTeam = GetClientTeam(client);
-        new String:command[] = "sb_takecontrol";
-        new flags = GetCommandFlags(command);
-        SetCommandFlags(command, flags & ~FCVAR_CHEAT);
+        new flags = GetCommandFlags("sb_takecontrol");
+        SetCommandFlags("sb_takecontrol", flags & ~FCVAR_CHEAT);
         new String:botNames[][] = { "teengirl", "manager", "namvet", "biker" };
         
         new i = 0;
-        while((localClientTeam != L4D_TEAM_SURVIVOR) && i < 4)
+        while((localClientTeam != TEAM_SURVIVOR) && i < 4)
         {
             FakeClientCommand(client, "sb_takecontrol %s", botNames[i]);
             localClientTeam = GetClientTeam(client);
             i++;
         }
-        SetCommandFlags(command, flags);
+        SetCommandFlags("sb_takecontrol", flags);
+    }
+    return Plugin_Handled;
 }
 
 /**

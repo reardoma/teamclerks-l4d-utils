@@ -1,3 +1,9 @@
+// Don't let the script be included more than once.
+#if defined _teamclerks_lerptracker
+  #endinput
+#endif
+#define _teamclerks_lerptracker
+
 /**
  * This lerptracker was originally written by ProdigySim, and as such I have left all his
  * plugin info as-is. However, I wanted to add the command that shows the lerps to a

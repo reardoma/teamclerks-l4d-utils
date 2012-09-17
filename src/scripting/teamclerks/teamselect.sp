@@ -9,14 +9,20 @@
 #endif
 #define _teamclerks_teamselect
 
-static const String: TEAM_SELECT_SURVIVOR[]       = "surv";
-static const String: TEAM_SELECT_INFECTED[]       = "inf";
-static const String: TEAM_SELECT_SPECTATOR[]      = "spec";
+static const String: TEAM_SELECT_SURV[]           = "surv";
+static const String: TEAM_SELECT_SURVIVOR[]       = "survivor";
+static const String: TEAM_SELECT_INF[]            = "inf";
+static const String: TEAM_SELECT_INFECTED[]       = "infected";
+static const String: TEAM_SELECT_SPEC[]           = "spec";
+static const String: TEAM_SELECT_SPECTATOR[]      = "spectator";
 
 public _TeamSelect_OnPluginStart()
 {    
+    AddCommandListenerEx(Attempt_Swap_To_Survivor, TEAM_SELECT_SURV);
     AddCommandListenerEx(Attempt_Swap_To_Survivor, TEAM_SELECT_SURVIVOR);
+    AddCommandListenerEx(Attempt_Swap_To_Infected, TEAM_SELECT_INF);
     AddCommandListenerEx(Attempt_Swap_To_Infected, TEAM_SELECT_INFECTED);
+    AddCommandListenerEx(Swap_To_Spectator, TEAM_SELECT_SPEC);
     AddCommandListenerEx(Swap_To_Spectator, TEAM_SELECT_SPECTATOR);
 }
 
@@ -32,12 +38,10 @@ public Action:Attempt_Swap_To_Survivor(client, const String:command[], argc)
     if (GetClientTeam(client) == TEAM_SURVIVOR)
     {
         PrintToChat(client, "[SM] You are already on the Survivor team.");
-        return Plugin_Handled;
     }
-    if (freeSurvivorSlots <= 0)
+    else if (freeSurvivorSlots <= 0)
     {
         PrintToChat(client, "[SM] Survivor team is full.");
-        return Plugin_Handled;
     }
     else
     {
@@ -55,6 +59,7 @@ public Action:Attempt_Swap_To_Survivor(client, const String:command[], argc)
         }
         SetCommandFlags("sb_takecontrol", flags);
     }
+    
     return Plugin_Handled;
 }
 

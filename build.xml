@@ -16,7 +16,11 @@
   <property name="cfg" value="${base}/src/cfg" />
   <property name="maps" value="${base}/src/maps" />
   <property name="build" value="${base}/build" />
+  
+  <!-- Dependencies (for the server; these folders map 1-1 with the server setup)      -->
   <property name="dependencies" value="${base}/dependencies" />
+  <property name="configs" value="${dependencies}/maps/cfg" />
+  <property name="missions" value="${dependencies}/missions" />
   <property name="addons" value="${dependencies}/addons" />
   
   <!-- Addons -->
@@ -26,6 +30,7 @@
   <!-- Sourcemod Specifics -->
   <property name="sm.extensions" value="${sourcemod}/extensions" />
   <property name="sm.gamedata" value="${sourcemod}/gamedata" />
+  <property name="sm.plugins" value="${sourcemod}/plugins" />
   
   <!-- This MUST be overwritten in the build.properties file if you are going to use   -->
   <!-- dist to deploy to your local (testing) server. This should be the base of your  -->
@@ -52,7 +57,7 @@
       <arg line="-D${src} &quot;l4dready.sp&quot;" />
     </exec>
     <exec executable="${sourcePawn}" failonerror="true">
-      <arg line="-D${src} &quot;l4dscores.sp&quot;" />
+      <arg line="-D${src} &quot;lerps.sp&quot;" />
     </exec>
     <exec executable="${sourcePawn}" failonerror="true">
       <arg line="-D${src} &quot;rotoblin.main.sp&quot;" />
@@ -66,7 +71,8 @@
   <target name="build" depends="compile" description="Builds the plugin">
     <mkdir dir="${build}" />
     <move file="${src}/l4dready.smx" tofile="${build}/l4dready.smx" />
-    <move file="${src}/l4dscores.smx" tofile="${build}/l4dscores.smx" />
+    <move file="${src}/lerps.smx" tofile="${build}/lerps.smx" />
+    <copy file="${sm.plugins}/l4dscores.smx" tofile="${build}/l4dscores.smx" />
     <move file="${src}/rotoblin.main.smx" tofile="${build}/rotoblin.smx" />
     <move file="${src}/${pluginName}.smx" tofile="${build}/${plugin}.smx" />
     <antcall target="-outputDescription">
@@ -77,7 +83,8 @@
   <!-- Builds and distributes the plugin to a destination server setup (including config files) -->
   <target name="dist" depends="compile" description="Builds and distributes the plugin">
     <move file="${src}/l4dready.smx" tofile="${dist}/addons/sourcemod/plugins/l4dready.smx" />
-    <move file="${src}/l4dscores.smx" tofile="${dist}/addons/sourcemod/plugins/l4dscores.smx" />
+    <move file="${src}/lerps.smx" tofile="${dist}/addons/sourcemod/plugins/lerps.smx" />
+    <copy file="${sm.plugins}/l4dscores.smx" tofile="${dist}/addons/sourcemod/plugins/l4dscores.smx" />
     <move file="${src}/rotoblin.main.smx" tofile="${dist}/addons/sourcemod/plugins/rotoblin.smx" />
     <move file="${src}/${pluginName}.smx" toFile="${dist}/addons/sourcemod/plugins/${plugin}.smx" />
     <copy todir="${dist}/cfg/${plugin}">
@@ -93,6 +100,16 @@
     <copy todir="${dist}/maps/cfg">
       <fileset dir="${maps}/cfg">
         <include name="**/*.cfg" />
+      </fileset>
+    </copy>
+    <copy todir="${dist}/maps/cfg">
+      <fileset dir="${configs}">
+        <include name="**/*.cfg" />
+      </fileset>
+    </copy>
+    <copy todir="${dist}/missions">
+      <fileset dir="${missions}">
+        <include name="**/*.txt" />
       </fileset>
     </copy>
     <copy todir="${dist}/addons/sourcemod/gamedata">
@@ -131,8 +148,8 @@
     <echo>-    as: l4dready.smx</echo>
     <echo>-    in: ${outputDir}</echo>
     <echo>-</echo>
-    <echo>- Built: l4dscores.sp</echo>
-    <echo>-    as: l4dscores.smx</echo>
+    <echo>- Built: lerps.sp</echo>
+    <echo>-    as: lerps.smx</echo>
     <echo>-    in: ${outputDir}</echo>
     <echo>-</echo>
     <echo>- Built: rotoblin.sp</echo>

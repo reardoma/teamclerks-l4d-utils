@@ -75,13 +75,13 @@
 
 #include "teamclerks/helpers/clients.inc"
 #include "teamclerks/helpers/restartmap.inc"
+#include "teamclerks/helpers/colors.inc"
 
 #include "teamclerks/cvarsilencer.sp"
 #include "teamclerks/load.sp"
 #include "teamclerks/skeetpractice.sp"
 #include "teamclerks/1v1.sp"
 #include "teamclerks/teamselect.sp"
-#include "teamclerks/lerps.sp"
 
 // --------------------
 //       Private
@@ -164,7 +164,6 @@ public OnPluginStartEx()
     _SkeetPractice_OnPluginStart();
     _1v1_OnPluginStart();
     _TeamSelect_OnPluginStart();
-    _Lerps_OnPluginStart();
     
     // Create cvar for control plugin state
     Format(buffer, sizeof(buffer), "Sets whether %s is enabled", PLUGIN_FULLNAME);

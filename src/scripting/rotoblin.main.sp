@@ -3,12 +3,12 @@
  *
  *  Rotoblin
  *
- *  File:			rotoblin.main.sp
- *  Type:			Main
- *  Description:	Contains defines, enums, etc available to anywhere in the 
- *					plugin.
- *	Credits:		Greyscale & rhelgeby for their template "project base"
- *					(http://forums.alliedmods.net/showthread.php?t=117191).
+ *  File:           rotoblin.main.sp
+ *  Type:           Main
+ *  Description:    Contains defines, enums, etc available to anywhere in the 
+ *                  plugin.
+ *  Credits:        Greyscale & rhelgeby for their template "project base"
+ *                  (http://forums.alliedmods.net/showthread.php?t=117191).
  *
  *  Copyright (C) 2010  Mr. Zero <mrzerodk@gmail.com>
  *
@@ -38,21 +38,27 @@
 //                   Reference
 // **********************************************
 
-#define SERVER_INDEX			0 // The client index of the server
+#define SERVER_INDEX            0 // The client index of the server
+#define FIRST_CLIENT            1 // First valid client index
 
-#define MAX_ENTITIES			2048 // Max number of entities l4d supports
+// The team list
+#define TEAM_SPECTATOR          1
+#define TEAM_SURVIVOR           2
+#define TEAM_INFECTED           3
+
+#define MAX_ENTITIES            2048 // Max number of entities l4d supports
 
 // Plugin info
-#define PLUGIN_FULLNAME			"Rotoblin"							// Used when printing the plugin name anywhere
-#define PLUGIN_SHORTNAME		"rotoblin"							// Shorter version of the full name, used in file paths, and other things
-#define PLUGIN_AUTHOR			"Rotoblin Team"						// Author of the plugin
-#define PLUGIN_DESCRIPTION		"A competitive mod for L4D"			// Description of the plugin
-#define PLUGIN_VERSION			"0.8.2"								// http://wiki.eclipse.org/Version_Numbering
-#define PLUGIN_URL				"http://rotoblin.googlecode.com/"	// URL associated with the project
-#define PLUGIN_CVAR_PREFIX		PLUGIN_SHORTNAME				// Prefix for cvars
-#define PLUGIN_CMD_PREFIX		PLUGIN_SHORTNAME				// Prefix for cmds
-#define PLUGIN_TAG				"Rotoblin"							// Tag for prints and commands
-#define	PLUGIN_GAMECONFIG_FILE	PLUGIN_SHORTNAME				// Name of gameconfig file
+#define PLUGIN_FULLNAME         "Rotoblin"                          // Used when printing the plugin name anywhere
+#define PLUGIN_SHORTNAME        "rotoblin"                          // Shorter version of the full name, used in file paths, and other things
+#define PLUGIN_AUTHOR           "Rotoblin Team"                     // Author of the plugin
+#define PLUGIN_DESCRIPTION      "A competitive mod for L4D"         // Description of the plugin
+#define PLUGIN_VERSION          "0.8.2"                             // http://wiki.eclipse.org/Version_Numbering
+#define PLUGIN_URL              "http://rotoblin.googlecode.com/"   // URL associated with the project
+#define PLUGIN_CVAR_PREFIX      PLUGIN_SHORTNAME                // Prefix for cvars
+#define PLUGIN_CMD_PREFIX       PLUGIN_SHORTNAME                // Prefix for cmds
+#define PLUGIN_TAG              "Rotoblin"                          // Tag for prints and commands
+#define PLUGIN_GAMECONFIG_FILE  PLUGIN_SHORTNAME                // Name of gameconfig file
 
 // **********************************************
 //                    Includes
@@ -79,6 +85,7 @@
 #include "rotoblin/helpers/mapinfo.inc"
 #include "rotoblin/helpers/tankmanager.inc"
 #include "rotoblin/helpers/wrappers.inc"
+#include "rotoblin/helpers/pillslocation.inc"
 
 // Modules
 #include "rotoblin/2vs2mod.sp"
@@ -105,49 +112,49 @@
 //       Private
 // --------------------
 
-static				bool:	g_bIsZACKLoaded = false;
+static              bool:   g_bIsZACKLoaded = false;
 
 // **********************************************
-//					  Forwards
+//                    Forwards
 // **********************************************
 
 public Plugin:myinfo = 
 {
-	name = PLUGIN_FULLNAME,
-	author = PLUGIN_AUTHOR,
-	description = PLUGIN_DESCRIPTION,
-	version = PLUGIN_VERSION,
-	url = PLUGIN_URL
+    name = PLUGIN_FULLNAME,
+    author = PLUGIN_AUTHOR,
+    description = PLUGIN_DESCRIPTION,
+    version = PLUGIN_VERSION,
+    url = PLUGIN_URL
 }
 
 /**
  * Called on pre plugin start.
  *
- * @param myself		Handle to the plugin.
- * @param late			Whether or not the plugin was loaded "late" (after map load).
- * @param error			Error message buffer in case load failed.
- * @param err_max		Maximum number of characters for error message buffer.
- * @return				APLRes_Success for load success, APLRes_Failure or APLRes_SilentFailure otherwise.
+ * @param myself        Handle to the plugin.
+ * @param late          Whether or not the plugin was loaded "late" (after map load).
+ * @param error         Error message buffer in case load failed.
+ * @param err_max       Maximum number of characters for error message buffer.
+ * @return              APLRes_Success for load success, APLRes_Failure or APLRes_SilentFailure otherwise.
  */
 public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max)
 {
-	/* Check plugin dependencies */
-	if (!IsDedicatedServer())
-	{
-		strcopy(error, err_max, "Plugin only support dedicated servers");
-		return APLRes_Failure; // Plugin does not support client listen servers, return
-	}
+    /* Check plugin dependencies */
+    if (!IsDedicatedServer())
+    {
+        strcopy(error, err_max, "Plugin only support dedicated servers");
+        return APLRes_Failure; // Plugin does not support client listen servers, return
+    }
 
-	decl String:buffer[128];
-	GetGameFolderName(buffer, 128);
+    decl String:buffer[128];
+    GetGameFolderName(buffer, 128);
 
-	if (!StrEqual(buffer, "left4dead", false))
-	{
-		strcopy(error, err_max, "Plugin only support Left 4 Dead");
-		return APLRes_Failure; // Plugin does not support this game, return
-	}
+    if (!StrEqual(buffer, "left4dead", false))
+    {
+        strcopy(error, err_max, "Plugin only support Left 4 Dead");
+        return APLRes_Failure; // Plugin does not support this game, return
+    }
 
-	return APLRes_Success; // Allow load
+    return APLRes_Success; // Allow load
 }
 
 /**
@@ -157,121 +164,118 @@ public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max)
  */
 public OnPluginStartEx()
 {
-	DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Setting up...");
+    DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Setting up...");
 
-	decl String:buffer[128];
-	Format(buffer, sizeof(buffer), "%s version", PLUGIN_FULLNAME);
-	new Handle:convar = CreateConVarEx("version", PLUGIN_VERSION, buffer, FCVAR_PLUGIN | FCVAR_NOTIFY);
-	SetConVarString(convar, PLUGIN_VERSION);
+    decl String:buffer[128];
+    Format(buffer, sizeof(buffer), "%s version", PLUGIN_FULLNAME);
+    new Handle:convar = CreateConVarEx("version", PLUGIN_VERSION, buffer, FCVAR_PLUGIN | FCVAR_NOTIFY);
+    SetConVarString(convar, PLUGIN_VERSION);
 
-	if (GetMaxEntities() > MAX_ENTITIES) // Ensure that our MAX_ENTITIES const is updated
-	{
-		ThrowError("Max entities exceeded, %d. Plugin needs a recompile with a updated max entity const, current value %d.", GetMaxEntities(), MAX_ENTITIES);
-	}
+    if (GetMaxEntities() > MAX_ENTITIES) // Ensure that our MAX_ENTITIES const is updated
+    {
+        ThrowError("Max entities exceeded, %d. Plugin needs a recompile with a updated max entity const, current value %d.", GetMaxEntities(), MAX_ENTITIES);
+    }
 
-	/* Initial setup of modules after event manager is done setting up.
-	 * To disable certain module, simply comment out the line. */
+    /* Initial setup of modules after event manager is done setting up.
+     * To disable certain module, simply comment out the line. */
 
-	_H_TankManager_OnPluginStart();
-	_H_ClientIndexes_OnPluginStart();
-	_H_CommandManager_OnPluginStart();
-	
-	//_AutoUpdate_OnPluginStart();
-	_HealthControl_OnPluginStart();
-	_WeaponControl_OnPluginStart();
-	_GhostTank_OnPluginStart();
-	_SpectateBoss_OnPluginStart();
-	_InfFrustration_OnPluginStart();
-	_RateHack_OnPluginStart();
-	_Pause_OnPluginStart();
-	_InfExloitFixes_OnPluginStart();
-	_DespawnInfected_OnPluginStart();
-	_HordeControl_OnPluginStart();
-	_2vs2Mod_OnPluginStart();
-	_NoPropFading_OnPluginStart();
-	_ReportStatus_OnPluginStart();
-	_HDRCheck_OnPluginStart();
-	_UnreserveLobby_OnPluginStart();
-	_PumpSwap_OnPluginStart();
-	_LimitHuntingRifl_OnPluginStart();
-	_ItemControl_OnPluginStart();
-	_MeleeFatigue_OnPluginStart();
-	//_FinaleSpawn_OnPluginStart();
-	//_SurvExploitFixes_OnPluginStart();
-	
-	// Create cvar for control plugin state
-	Format(buffer, sizeof(buffer), "Sets whether %s is enabled", PLUGIN_FULLNAME);
-	convar = CreateConVarEx("enable", "0", buffer, FCVAR_PLUGIN | FCVAR_NOTIFY);
+    _H_TankManager_OnPluginStart();
+    _H_ClientIndexes_OnPluginStart();
+    _H_CommandManager_OnPluginStart();
+    
+    _HealthControl_OnPluginStart();
+    _WeaponControl_OnPluginStart();
+    _GhostTank_OnPluginStart();
+    _SpectateBoss_OnPluginStart();
+    _InfFrustration_OnPluginStart();
+    _RateHack_OnPluginStart();
+    _Pause_OnPluginStart();
+    _InfExloitFixes_OnPluginStart();
+    _DespawnInfected_OnPluginStart();
+    _HordeControl_OnPluginStart();
+    _2vs2Mod_OnPluginStart();
+    _NoPropFading_OnPluginStart();
+    _ReportStatus_OnPluginStart();
+    _HDRCheck_OnPluginStart();
+    _UnreserveLobby_OnPluginStart();
+    _PumpSwap_OnPluginStart();
+    _LimitHuntingRifl_OnPluginStart();
+    _ItemControl_OnPluginStart();
+    _MeleeFatigue_OnPluginStart();
+    
+    // Create cvar for control plugin state
+    Format(buffer, sizeof(buffer), "Sets whether %s is enabled", PLUGIN_FULLNAME);
+    convar = CreateConVarEx("enable", "0", buffer, FCVAR_PLUGIN | FCVAR_NOTIFY);
 
-	if (convar == INVALID_HANDLE) ThrowError("Unable to create main enable cvar!");
-	if (GetConVarBool(convar) && !IsDedicatedServer())
-	{
-		SetConVarBool(convar, false);
-		DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Unable to enable rotoblin, running on a listen server!");
-	}
-	else
-	{
-		SetPluginState(GetConVarBool(convar));
-	}
+    if (convar == INVALID_HANDLE) ThrowError("Unable to create main enable cvar!");
+    if (GetConVarBool(convar) && !IsDedicatedServer())
+    {
+        SetConVarBool(convar, false);
+        DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Unable to enable rotoblin, running on a listen server!");
+    }
+    else
+    {
+        SetPluginState(GetConVarBool(convar));
+    }
 
-	HookConVarChange(convar, _Main_Enable_CvarChange);
-	DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Done setting up!");
+    HookConVarChange(convar, _Main_Enable_CvarChange);
+    DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Done setting up!");
 }
 
 public OnAllPluginsLoaded()
 {
-	if (LibraryExists("zack")) // If ZACK is loaded on the server
-	{
-		g_bIsZACKLoaded = true;
-	}
-	else
-	{
-		g_bIsZACKLoaded = false;
-	}
+    if (LibraryExists("zack")) // If ZACK is loaded on the server
+    {
+        g_bIsZACKLoaded = true;
+    }
+    else
+    {
+        g_bIsZACKLoaded = false;
+    }
 }
 
 public OnLibraryRemoved(const String:name[])
 {
-	if (StrEqual(name, "zack"))
-	{
-		g_bIsZACKLoaded = false;
-	}
+    if (StrEqual(name, "zack"))
+    {
+        g_bIsZACKLoaded = false;
+    }
 }
 
 public OnLibraryAdded(const String:name[])
 {
-	if (StrEqual(name, "zack"))
-	{
-		g_bIsZACKLoaded = true;
-	}
+    if (StrEqual(name, "zack"))
+    {
+        g_bIsZACKLoaded = true;
+    }
 }
 
 /**
  * Enable cvar changed.
  *
- * @param convar		Handle to the convar that was changed.
- * @param oldValue		String containing the value of the convar before it was changed.
- * @param newValue		String containing the new value of the convar.
+ * @param convar        Handle to the convar that was changed.
+ * @param oldValue      String containing the value of the convar before it was changed.
+ * @param newValue      String containing the new value of the convar.
  * @noreturn
  */
 public _Main_Enable_CvarChange(Handle:convar, const String:oldValue[], const String:newValue[])
 {
-	DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Enable cvar was changed. Old value %s, new value %s", oldValue, newValue);
+    DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Enable cvar was changed. Old value %s, new value %s", oldValue, newValue);
 
-	if (GetConVarBool(convar) && !IsDedicatedServer())
-	{
-		SetConVarBool(convar, false);
-		DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Unable to enable rotoblin, running on a listen server!");
-		PrintToChatAll("[%s] Unable to enable %s! %s only support dedicated servers", PLUGIN_TAG, PLUGIN_FULLNAME, PLUGIN_FULLNAME);
-		return;
-	}
+    if (GetConVarBool(convar) && !IsDedicatedServer())
+    {
+        SetConVarBool(convar, false);
+        DebugPrintToAll(DEBUG_CHANNEL_GENERAL, "[Main] Unable to enable rotoblin, running on a listen server!");
+        PrintToChatAll("[%s] Unable to enable %s! %s only support dedicated servers", PLUGIN_TAG, PLUGIN_FULLNAME, PLUGIN_FULLNAME);
+        return;
+    }
 
-	SetPluginState(bool:StringToInt(newValue));
+    SetPluginState(bool:StringToInt(newValue));
 }
 
 /**
  * Returns whether ZACK is loaded.
  *
- * @return				True if ZACK is loaded, false otherwise.
+ * @return              True if ZACK is loaded, false otherwise.
  */
 stock bool:IsZACKLoaded() return g_bIsZACKLoaded;

@@ -1,16 +1,164 @@
+/**
+ * L4D RUP, modded by Jackpf.
+ *  Changes:
+ *      Spectators no longer need to ready up, and are displayed at the bottom of the panel, controlled by a cvar.
+ *      The league notice is defined by a cvar.
+ *      The live countdown interval is defined by a cvar.
+ *      (dev) No round restart after ready, controlled by a cvar.
+ *      Various code optimisations.
+ *      Support for ?v? cfgs.
+*/
+
+#if defined _l4do_included
+ #endinput
+#endif
+#define _l4do_included
+
+#include <sourcemod>
+
+/**
+ * @brief Called whenever ZombieManager::SpawnTank(Vector&,QAngle&) is invoked
+ * @remarks Not invoked if z_spawn tank is used and it gives a ghosted/dead player tank
+ *
+ * @param vector    Vector coordinate where tank is spawned
+ * @param qangle    QAngle where tank will be facing
+ * @return      Pl_Handled to block tank from spawning, Pl_Continue otherwise.
+ */
+forward Action:L4D_OnSpawnTank(const Float:vector[3], const Float:qangle[3]);
+
+/**
+ * @brief Called whenever ZombieManager::SpawnWitch(Vector&,QAngle&) is invoked
+ *
+ * @param vector    Vector coordinate where witch is spawned
+ * @param qangle    QAngle where witch will be facing
+ * @return      Pl_Handled to block witch from spawning, Pl_Continue otherwise.
+ */
+forward Action:L4D_OnSpawnWitch(const Float:vector[3], const Float:qangle[3]);
+
+/**
+ * @brief Called whenever CTerrorGameRules::ClearTeamScores(bool) is invoked
+ * @remarks     This resets the map score at the beginning of a map, and by checking 
+ *                the campaign scores on a small timer you can see if they were reset as well.
+ * 
+ * @param newCampaign  if true then this is a new campaign, if false a new chapter
+ * @return      Pl_Handled to block scores from being cleared, Pl_Continue otherwise.
+ */
+forward Action:L4D_OnClearTeamScores(bool:newCampaign);
+
+/**
+ * @brief Called whenever CTerrorGameRules::SetCampaignScores(int,int) is invoked
+ * @remarks The campaign scores are updated after the 2nd round is completed
+ * 
+ * @param scoreA  score of logical team A
+ * @param scoreB  score of logical team B
+ * @return      Pl_Handled to block campaign scores from being set, Pl_Continue otherwise.
+ */
+forward Action:L4D_OnSetCampaignScores(&scoreA, &scoreB);
+
+/**
+ * @brief Called whenever CDirector::OnFirstSurvivorLeftSafeArea
+ * @remarks A versus round is started when survivors leave the safe room, or force started
+ *          after 90 seconds regardless.
+ * 
+ * @param client  the survivor that left the safe area first
+ * 
+ * @return      Pl_Handled to block round from being started, Pl_Continue otherwise.
+ */
+forward Action:L4D_OnFirstSurvivorLeftSafeArea(client);
+
+/**
+ * @brief Get the current campaign scores stored in the Director
+ * @remarks The campaign scores are updated after L4D_OnSetCampaignScores
+ * 
+ * @deprecated This will set the scores to -1 for both sides on L4D2,
+ *               this function is no longer supported.
+ * 
+ * @param scoreA  score of logical team A
+ * @param scoreB  score of logical team B
+ * @return      1 always
+ */
+native L4D_GetCampaignScores(&scoreA, &scoreB);
+
+/**
+ * @brief Get the team scores for the current map
+ * @remarks The campaign scores are not set until the end of round 2,
+ *           use L4D_GetCampaignScores to get them earlier.
+ *
+ * @deprecated This function can be called through SDKTools using CTerrorGameRules,
+ *          and so you should switch off to using SDKTools instead of this native.
+ * 
+ * @param logical_team  0 for A, 1 for B
+ * @param campaign_score  true to get campaign score instead of map score
+ * @return      the logical team's map score 
+ *                      or -1 if the team hasn't played the round yet,
+ *                or the team's campaign score if campaign_score = true
+ */
+native L4D_GetTeamScore(logical_team, campaign_score=false);
+
+/**
+ * @brief Restarts the setup timer (when in scavenge mode)
+ * @remarks If game has already started, the setup timer will show,
+ *           but it still won't go back into setup.
+ */
+native L4D_ScavengeBeginRoundSetupTime();
+
+/**
+ * @brief Restarts the round, switching the map if necessary
+ * @remarks Set the map to the current map to restart the round
+ * 
+ * @param map  the mapname it should go to after the round restarts
+ * @return     1 always
+ */
+native L4D_RestartScenarioFromVote(const String:map[]);
+
+/**
+ * @brief Removes lobby reservation from a server
+ * @remarks Sets the reservation cookie to 0,
+ *           it is safe to call this even if it's unreserved.
+ */
+native L4D_LobbyUnreserve();
+
+/**
+ * @brief Checks if the server is currently reserved for a lobby
+ * @remarks Server is automatically unreserved if it hibernates or
+ *          if all players leave.
+ *
+ * @deprecated This will always return false on L4D2 or on Linux.
+ *
+ * @return     true if reserved, false if not reserved
+ */
+native bool:L4D_LobbyIsReserved();
+
+/*
+Makes the extension required by the plugins, undefine REQUIRE_EXTENSIONS
+if you want to use it optionally before including this .inc file
+*/
+public Extension:__ext_geoip = 
+{
+    name = "Left 4 Downtown",
+    file = "left4downtown.ext",
+#if defined AUTOLOAD_EXTENSIONS
+    autoload = 1,
+#else
+    autoload = 0,
+#endif
+#if defined REQUIRE_EXTENSIONS
+    required = 1,
+#else
+    required = 0,
+#endif
+};
+
 #pragma semicolon 1
 
 #include <sourcemod>
 #include <sdktools>
-#include <left4downtown>
-
-#include "teamclerks/helpers/clients.inc"
 
 /*
 * PROGRAMMING CREDITS:
 * Could not do this without Fyren at all, it was his original code chunk 
-*     that got me started (especially turning off directors and freezing players).
-*     Thanks to him for answering all of my silly coding questions too.
+*   that got me started (especially turning off directors and freezing players).
+*   Thanks to him for answering all of my silly coding questions too.
 * 
 * TESTING CREDITS:
 * 
@@ -21,42 +169,25 @@
 #define READY_DEBUG 0
 #define READY_DEBUG_LOG 0
 
-#define READY_VERSION "0.17.3.tc"
-#define READY_SCAVENGE_WARMUP 1
-#define READY_LIVE_COUNTDOWN 5
+#define READY_VERSION "0.23.TC"
+//#define READY_LIVE_COUNTDOWN 0 //5
 #define READY_UNREADY_HINT_PERIOD 10.0
 #define READY_LIST_PANEL_LIFETIME 10
-#define READY_RESTART_ROUND_DELAY 0.0
-#define READY_RESTART_MAP_DELAY 5.0
-#define READY_RESTART_SCAVENGE_TIMER 0.1
+#define READY_RESTART_ROUND_DELAY 5.0
+#define READY_RESTART_MAP_DELAY 2.0
 
-#define READY_VERSION_REQUIRED_SOURCEMOD "1.4.0"
-#define READY_VERSION_REQUIRED_SOURCEMOD_NONDEV 0 //1 dont allow -dev version, 0 ignore -dev version
-#define READY_VERSION_REQUIRED_LEFT4DOWNTOWN "0.4.2"
+#define READY_VERSION_REQUIRED_SOURCEMOD "1.3.1"
+#define READY_VERSION_REQUIRED_SOURCEMOD_NONDEV 1 //1 dont allow -dev version, 0 ignore -dev version
+#define READY_VERSION_REQUIRED_LEFT4DOWNTOWN "0.3.1"
 
-#define L4D_MAXCLIENTS (MaxClients)
-#define L4D_MAXCLIENTS_PLUS1 (MaxClients+1)
 #define L4D_TEAM_SURVIVORS 2
 #define L4D_TEAM_INFECTED 3
 #define L4D_TEAM_SPECTATE 1
 
-#define L4D_SCAVENGE_GAMECLOCK_HALT (-1.0)
+//stuff from rotoblin report status
+#define REPORT_STATUS_MAX_MSG_LENGTH 1024
 
-#define L4D_TEAM_A 0
-#define L4D_TEAM_B 1
-#define L4D_TEAM_NAME(%1) (%1 == 2 ? "Survivors" : (%1 == 3 ? "Infected" : (%1 == 1 ? "Spectators" : "Unknown")))
-
-#define SCORE_DELAY_PLACEMENT 0.1
-#define SCORE_DELAY_TEAM_SWITCH 0.1
-#define SCORE_DELAY_SWITCH_MAP 1.0
-#define SCORE_DELAY_EMPTY_SERVER 5.0
-#define SCORE_DELAY_SCORE_SWAPPED 0.1
-
-#define CEVO_ADD_NOTICE 0
-#define GAMECONFIG_FILE (IsTargetL4D2() ? "left4downtown.l4d2" : "left4downtown.l4d")
-#define L4D_UNPAUSE_DELAY 5
-
-#define HEALTH_BONUS_FIX 0
+#define HEALTH_BONUS_FIX 1
 
 #if HEALTH_BONUS_FIX
 
@@ -73,30 +204,17 @@
 #endif
 
 #define EBLOCK_USE_DELAYED_UPDATES 0
+#define LEAGUE_ADD_NOTICE 1
 
 new bool:painPillHolders[256];
 #endif
-
-#define LEAGUE_ADD_NOTICE 1
 
 /*
 * TEST - should be fixed: the "error more than 1 witch spawned in a single round"
 *  keeps being printed
 * even though there isnt an extra witch being spawned or w/e
 */
-enum PersistentTeam
-{
-    PersistentTeam_Invalid,
-    PersistentTeam_A,
-    PersistentTeam_B
-}
-enum L4D2Team
-{
-    L4D2Team_Unknown    = 0,
-    L4D2Team_Survivors    = 2,
-    L4D2Team_Infected    = 3,
-    L4D2Team_Spectators    = 1
-}
+
 new bool:readyMode; //currently waiting for players to ready up?
 
 new goingLive; //0 = not going live, 1 or higher = seconds until match starts
@@ -108,6 +226,7 @@ new bool:isCampaignBeingRestarted;
 new forcedStart;
 new readyStatus[MAXPLAYERS + 1];
 
+//new bool:menuInterrupted[MAXPLAYERS + 1];
 new Handle:menuPanel = INVALID_HANDLE;
 
 new Handle:liveTimer;
@@ -118,96 +237,100 @@ new Handle:cvarReadyCompetition = INVALID_HANDLE;
 new Handle:cvarReadyMinimum = INVALID_HANDLE;
 new Handle:cvarReadyHalves = INVALID_HANDLE;
 new Handle:cvarReadyServerCfg = INVALID_HANDLE;
-new Handle:cvarReadySearchKeyDisable = INVALID_HANDLE;
+new Handle:cvarReadySpectatorRUP = INVALID_HANDLE;
+new Handle:cvarReadyRestartRound = INVALID_HANDLE;
 new Handle:cvarReadyLeagueNotice = INVALID_HANDLE;
+new Handle:cvarReadyLiveCountdown = INVALID_HANDLE;
+new Handle:cvarReadySearchKeyDisable = INVALID_HANDLE;
 new Handle:cvarSearchKey = INVALID_HANDLE;
-new Handle:cvarGameMode = INVALID_HANDLE;
-new Handle:cvarScavengeSetup = INVALID_HANDLE;
-new Handle:cvarGod = INVALID_HANDLE;
-//new Handle:cvarCFGName = INVALID_HANDLE;
-new Handle:cvarPausesAllowed = INVALID_HANDLE;
-new Handle:cvarPauseDuration = INVALID_HANDLE;
-new Handle:cvarConnectEnabled = INVALID_HANDLE;
+
+//new way of readying up?
+new Handle:cvarReadyUpStyle = INVALID_HANDLE;
+
+new Handle:cvarReadyCommonLimit = INVALID_HANDLE;
+new Handle:cvarReadyMegaMobSize = INVALID_HANDLE;
+new Handle:cvarReadyAllBotTeam  = INVALID_HANDLE;
 
 new Handle:fwdOnReadyRoundRestarted = INVALID_HANDLE;
 
 new hookedPlayerHurt; //if we hooked player_hurt event?
 
 new pauseBetweenHalves; //should we ready up before starting the 2nd round or go live right away
-new bool:isSecondRound; //second round or later (esp. in scavenge)
-
-static teamScores[PersistentTeam];
-static bool:defaultTeams = true;
-new bool:isNewMap = true; //Has the game been paused yet on this map?
+new bool:isSecondRound;
 
 new bool:isMapRestartPending;
 
-new bool:inWarmUp; //Scavenge warm up during ready up.
+//stuff from zack_netinfo
+static          bool:   g_bCooldown[MAXPLAYERS + 1];
+//
+//fix spec calling !reready
+static          bool:   g_bIsSpectating[MAXPLAYERS + 1];
 
-new iInitialSetupTime = 45; //Setup time as determined by convar scavenge_round_setup_time
-new iInitialGhostTimeMin;
-new iInitialGhostTimeMax;
+//cooldown for sm_reready, and cvar handle to disable reready
+static          bool:   g_bCooldownReready                  = false;
+static          bool:   g_bAllowReready                     = true;
+static          Handle:cvarAllowReready                     = INVALID_HANDLE;
 
-new lastTeamPause; //Stores which team paused the game.
-new bool:canUnpause; //Whether or not either team can unpause
-new bool:isPaused;
-new bool:isUnpausing;
-new iInitialAllTalk;
-new bool:bReadyOffCalled = true;
-new Handle:timerMinimumPause = INVALID_HANDLE;
+//workaround for the spec/inf bug
+static          bool:infectedSpectator[MAXPLAYERS + 1];
+static          g_iSpectatePenalty                          = 7;
+static          g_iSpectatePenaltyCounter[MAXPLAYERS + 1];
+static          Handle:cvarSpectatePenalty                  = INVALID_HANDLE;
+//stuff from griffins rup edit
+static          g_iRespecCooldownTime                       = 60;
+static          g_iLastRespecced[MAXPLAYERS + 1];
+//stuff from rotoblin report status
+static  const           MAX_CONVAR_NAME_LENGTH                          = 64;
+static  const           CVAR_ARRAY_BLOCK                                = 2;
+static  const           FIRST_CVAR_IN_ARRAY                             = 0;
+static          Handle: g_aConVarArray                                  = INVALID_HANDLE;
+static          bool:   g_bIsArraySetup                                 = false;
 
-/* Team placement */
-new Handle:fSHS = INVALID_HANDLE; //SetHumanSpectator
-new Handle:fTOB = INVALID_HANDLE; //TakeOverBot
-new teamPlacementArray[256];  //after client connects, try to place him to this team
-new teamPlacementAttempts[256]; //how many times we attempt and fail to place a person
-
+static  const   Float:  CACHE_RESULT_TIME                               = 5.0;
+static          bool:   g_bIsResultCached                               = false;
+static          String: g_sResultCache[REPORT_STATUS_MAX_MSG_LENGTH]    = "";
 
 public Plugin:myinfo =
 {
-    name = "L4D2 Ready Up",
-    author = "Downtown1 and Frustian",
+    name = "L4D Ready Up",
+    author = "Downtown1, modded by Jackpf",
     description = "Force Players to Ready Up Before Beginning Match",
     version = READY_VERSION,
     url = "http://forums.alliedmods.net/showthread.php?t=84086"
 };
+
 public OnPluginStart()
 {
-    if(!IsTargetL4D2())
-    {
-        if(!IsTargetL4D1())
-        {
-            ThrowError("Plugin does not support any games besides L4D/L4D2");
-        }
-        //the l4d1 extension doesn't have this native
-        //but it won't get called on l4d2 either
-        MarkNativeAsOptional("L4D_ScavengeBeginRoundSetupTime");
-    }
-    
     LoadTranslations("common.phrases");
     
     //case-insensitive handling of ready,unready,notready
     RegConsoleCmd("say", Command_Say);
-    RegConsoleCmd("say_team", Command_Teamsay);
+    RegConsoleCmd("say_team", Command_Say);
 
     RegConsoleCmd("sm_ready", readyUp);
     RegConsoleCmd("sm_unready", readyDown);
     RegConsoleCmd("sm_notready", readyDown); //alias for people who are bad at reading instructions
     
-    RegConsoleCmd("sm_pause", readyPause);
-    RegConsoleCmd("sm_unpause", readyUnpause);
-    RegConsoleCmd("unpause", Command_Unpause);
+    RegConsoleCmd("sm_rates", ratesCommand);    //Prints net information about players
+    RegConsoleCmd("zack_netinfo", ratesCommand);    //Some people...
+    
+    //RegConsoleCmd("sm_sur", Join_Survivor);
+    //RegConsoleCmd("sm_inf", Join_Infected);
+    //RegConsoleCmd("sm_survivor", Join_Survivor);
+    //RegConsoleCmd("sm_infected", Join_Infected);
     
     //block all voting if we're enforcing ready mode
     //we only temporarily allow votes to fake restart the campaign
     RegConsoleCmd("callvote", callVote);
     
     RegConsoleCmd("spectate", Command_Spectate);
+    RegConsoleCmd("sm_respec", Respec_Client);
+    RegConsoleCmd("sm_respectate", Respec_Client);
     
     #if READY_DEBUG
-    RegConsoleCmd("unfreezeme1", Command_Unfreezeme1);    
-    RegConsoleCmd("unfreezeme2", Command_Unfreezeme2);    
-    RegConsoleCmd("unfreezeme3", Command_Unfreezeme3);    
+    RegConsoleCmd("unfreezeme1", Command_Unfreezeme1);  
+    RegConsoleCmd("unfreezeme2", Command_Unfreezeme2);  
+    RegConsoleCmd("unfreezeme3", Command_Unfreezeme3);  
     RegConsoleCmd("unfreezeme4", Command_Unfreezeme4);
     
     RegConsoleCmd("sm_printclients", printClients);
@@ -231,19 +354,21 @@ public OnPluginStart()
     
     RegAdminCmd("sm_abort", compAbort, ADMFLAG_BAN, "sm_abort");
     RegAdminCmd("sm_forcestart", compStart, ADMFLAG_BAN, "sm_forcestart");
+    RegAdminCmd("sm_unreready", Command_Unreready, ADMFLAG_BAN, "sm_unreready - cancel an active sm_reready");
+    //sm_switch
+    RegAdminCmd("sm_switch", Switch_Client, ADMFLAG_BAN, "sm_switch <player1> <player2> - switch A to B's team, and B to A's team.");
     
     HookEvent("round_start", eventRSLiveCallback);
     HookEvent("round_end", eventRoundEndCallback);
     
     HookEvent("player_bot_replace", eventPlayerBotReplaceCallback);
     HookEvent("bot_player_replace", eventBotPlayerReplaceCallback);
+    HookEvent("player_team", eventPlayerTeamCallback);
     
     HookEvent("player_spawn", eventSpawnReadyCallback);
     HookEvent("tank_spawn", Event_TankSpawn);
     HookEvent("witch_spawn", Event_WitchSpawn);
     HookEvent("player_left_start_area", Event_PlayerLeftStartArea);
-    
-    HookEvent("player_team", Event_PlayerTeam);
     
     #if READY_DEBUG
     HookEvent("vote_started", eventVoteStarted);
@@ -254,46 +379,45 @@ public OnPluginStart()
     HookConVarChange(NoBosses, ConVarChange_DirectorNoBosses);
     #endif
     
+    
     fwdOnReadyRoundRestarted = CreateGlobalForward("OnReadyRoundRestarted", ET_Event);
     
-    CreateConVar("l4d_ready_version", READY_VERSION, "Version of the ready up plugin.", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY);
-    cvarEnforceReady = CreateConVar("l4d_ready_enabled", "0", "Make players ready up before a match begins", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY);
-    cvarReadyCompetition = CreateConVar("l4d_ready_competition", "0", "Disable all plugins but a few competition-allowed ones", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY);
-    cvarReadyHalves = CreateConVar("l4d_ready_both_halves", "0", "Make players ready up both during the first and second rounds of a map", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY);
-    cvarReadyMinimum = CreateConVar("l4d_ready_minimum_players", "8", "Minimum # of players before we can ready up", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY);
-    cvarReadyServerCfg = CreateConVar("l4d_ready_server_cfg", "", "Config to execute when the map is changed (to exec after server.cfg).", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY);
-    cvarReadySearchKeyDisable = CreateConVar("l4d_ready_search_key_disable", "1", "Automatically disable plugin if sv_search_key is blank", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY);
+    CreateConVar("l4d_ready_version", READY_VERSION, "Version of the ready up plugin.", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
+    cvarEnforceReady = CreateConVar("l4d_ready_enabled", "1", "Make players ready up before a match begins", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
+    cvarReadyCompetition = CreateConVar("l4d_ready_competition", "0", "Disable all plugins but a few competition-allowed ones", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
+    cvarReadyHalves = CreateConVar("l4d_ready_both_halves", "0", "Make players ready up both during the first and second rounds of a map", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
+    cvarReadyMinimum = CreateConVar("l4d_ready_minimum_players", "8", "Minimum # of players before we can ready up", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
+    cvarReadyServerCfg = CreateConVar("l4d_ready_server_cfg", "", "Config to execute when the map is changed (to exec after server.cfg).", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
+    cvarReadySearchKeyDisable = CreateConVar("l4d_ready_search_key_disable", "0", "Automatically disable plugin if sv_search_key is blank", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
     cvarReadyLeagueNotice = CreateConVar("l4d_ready_league_notice", "", "League notice displayed on RUP panel", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
-//    cvarCFGName = CreateConVar("l4d_ready_cfg_name", "", "CFG Name to display on the RUP Menu", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY);
-    cvarPausesAllowed = CreateConVar("l4d_ready_pause_allowed", "3", "Number of times each team can pause per campaign", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY);
-    cvarPauseDuration = CreateConVar("l4d_ready_pause_duration", "90.0", "Minimum duration of pause in seconds before either team can unpause", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY);
-    cvarConnectEnabled = CreateConVar("l4d_ready_connect_enabled", "1", "Show Announcements When Players Join", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY);
+    cvarReadyLiveCountdown = CreateConVar("l4d_ready_live_countdown", "0", "Countdown timer to begin the round", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
+    cvarReadySpectatorRUP = CreateConVar("l4d_ready_spectator_rup", "0", "Whether or not spectators have to ready up", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
+    cvarReadyRestartRound = CreateConVar("l4d_ready_restart_round", "1", "Whether or not to restart the campaign after readying up (dev)", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
+    cvarReadyCommonLimit = CreateConVar("l4d_ready_common_limit", "30", "z_common_limit value after rup", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
+    cvarReadyMegaMobSize = CreateConVar("l4d_ready_mega_mob_size", "30", "z_mega_mob_size value after rup", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
+    cvarReadyAllBotTeam = CreateConVar("l4d_ready_all_bot_team", "0", "sb_all_bot_team value after rup", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
+    //new way of readying up?
+    cvarReadyUpStyle = CreateConVar("l4d_ready_up_style", "0", "0 = old style, 1 = infected can move during rup, players can move after rup", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
+    //added to enable blocking sm_reready
+    cvarAllowReready = CreateConVar("l4d_ready_allow_reready", "1", "Allow players to use sm_reready.", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
+    HookConVarChange(cvarAllowReready, ConVarChange_AllowReready);
+    //added to be able to set the !spectate !inf penalty
+    cvarSpectatePenalty = CreateConVar("l4d_ready_spectate_penalty", "8", "Time in seconds an infected player can't rejoin the infected team.", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
+    HookConVarChange(cvarSpectatePenalty, ConVarChange_cvarSpectatePenalt);
+    
+    CheckAllowReready();
+    CheckSpectatePenalty();
     
     cvarSearchKey = FindConVar("sv_search_key");
-    cvarGameMode = FindConVar("mp_gamemode");
-    cvarScavengeSetup = FindConVar("scavenge_round_setup_time");
-    cvarGod = FindConVar("god");
     
     HookConVarChange(cvarEnforceReady, ConVarChange_ReadyEnabled);
     HookConVarChange(cvarReadyCompetition, ConVarChange_ReadyCompetition);
     HookConVarChange(cvarSearchKey, ConVarChange_SearchKey);
     
-    // Team swapping SDK calls
-    new Handle:gConf = LoadGameConfigFile(GAMECONFIG_FILE);
-    StartPrepSDKCall(SDKCall_Player);
-    PrepSDKCall_SetFromConf(gConf, SDKConf_Signature, "SetHumanSpec");
-    PrepSDKCall_AddParameter(SDKType_CBasePlayer, SDKPass_Pointer);
-    fSHS = EndPrepSDKCall();
-    
-    StartPrepSDKCall(SDKCall_Player);
-    PrepSDKCall_SetFromConf(gConf, SDKConf_Signature, "TakeOverBot");
-    PrepSDKCall_AddParameter(SDKType_Bool, SDKPass_Plain);
-    fTOB = EndPrepSDKCall();
-    
     #if HEALTH_BONUS_FIX
-    CreateConVar("l4d_eb_health_bonus", EBLOCK_VERSION, "Version of the Health Bonus Exploit Blocker", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY|FCVAR_REPLICATED);
+    CreateConVar("l4d_eb_health_bonus", EBLOCK_VERSION, "Version of the Health Bonus Exploit Blocker", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY|FCVAR_REPLICATED);
     
-    HookEvent("item_pickup", Event_ItemPickup);    
+    HookEvent("item_pickup", Event_ItemPickup); 
     HookEvent("pills_used", Event_PillsUsed);
     HookEvent("heal_success", Event_HealSuccess);
     
@@ -306,27 +430,381 @@ public OnPluginStart()
     #endif
     #endif
     
+    AddCommandListener(Version_Command, "l4d_ready_version");
+    
+    AddConVarToReport(cvarReadyHalves);
+    AddConVarToReport(cvarReadyMinimum);
+    AddConVarToReport(cvarReadyServerCfg);
+    AddConVarToReport(cvarReadyUpStyle);
+    AddConVarToReport(cvarReadyLeagueNotice);
+    AddConVarToReport(cvarReadyLiveCountdown);
+    AddConVarToReport(cvarReadySpectatorRUP);
+    AddConVarToReport(cvarReadyRestartRound);
+    AddConVarToReport(cvarReadyCommonLimit);
+    AddConVarToReport(cvarReadyMegaMobSize);
+    AddConVarToReport(cvarReadyAllBotTeam);
+    AddConVarToReport(cvarAllowReready);
+    AddConVarToReport(cvarSpectatePenalty);
+}
+//sm_switch
+public Action:Switch_Client(client, args)
+{
+    if(args < 2)
+    {
+        ReplyToCommand(client, "[SM] Usage: sm_switch <player1> <player2> - switch both players to the opposite team.");        
+        return Plugin_Handled;
+    }
+    decl String:player1[64];
+    decl String:player2[64];
+    GetCmdArg(1, player1, sizeof(player1));
+    GetCmdArg(2, player2, sizeof(player2));
+    
+    new target1 = FindTarget(client, player1, true /*nobots*/, false /*immunity*/);
+    new target2 = FindTarget(client, player2, true /*nobots*/, false /*immunity*/);
+    
+    if((target1 == -1) || (target2 == -1)) return Plugin_Handled;
+    
+    new targetTeamA = GetClientTeam(target1);
+    new targetTeamB = GetClientTeam(target2);
+    
+    if (targetTeamA == targetTeamB)
+    {
+        if(client != 0)
+        PrintToChat(client, "[SM] Both players are on the same team.");
+        return Plugin_Handled;
+    }
+        
+    if((target1 != -1) && (target2 != -1))
+    {
+        new String:player1Name[64];
+        new String:player2Name[64];
+        GetClientName(target1, player1Name, sizeof(player1Name));
+        GetClientName(target2, player2Name, sizeof(player2Name));
+
+        if (targetTeamA != 1) ChangeClientTeam(target1, 1);
+        if (targetTeamB != 1) ChangeClientTeam(target2, 1);
+        
+        if (targetTeamA == 1) PrintToChatAll("[SM] %s has been swapped to the Spectator team.", player2Name);
+        if (targetTeamB == 1) PrintToChatAll("[SM] %s has been swapped to the Spectator team.", player1Name);
+        if (targetTeamA == 2) CreateTimer(0.1, SwitchTargetSurvivor, target2, TIMER_FLAG_NO_MAPCHANGE);
+        if (targetTeamA == 3) CreateTimer(0.1, SwitchTargetInfected, target2, TIMER_FLAG_NO_MAPCHANGE);
+        if (targetTeamB == 2) CreateTimer(0.1, SwitchTargetSurvivor, target1, TIMER_FLAG_NO_MAPCHANGE);
+        if (targetTeamB == 3) CreateTimer(0.1, SwitchTargetInfected, target1, TIMER_FLAG_NO_MAPCHANGE);
+        return Plugin_Handled;
+    }
+    return Plugin_Handled;
+}
+
+public Action:SwitchTargetSurvivor(Handle:timer, any:target)
+{
+    new String:playerName[64];
+    GetClientName(target, playerName, sizeof(playerName));
+    FakeClientCommand(target, "sm_survivor");
+    PrintToChatAll("[SM] %s has been swapped to the Survivor team.", playerName);
+    //make target go survivor
+}
+
+public Action:SwitchTargetInfected(Handle:timer, any:target)
+{
+    new String:playerName[64];
+    GetClientName(target, playerName, sizeof(playerName));
+    FakeClientCommand(target, "sm_infected");
+    PrintToChatAll("[SM] %s has been swapped to the Infected team.", playerName);   
+    //make target go inf
+}
+//previously in comp_loader sm_inf and sm_sur
+stock GetTeamHumanCount(team)
+{
+    new humans = 0;
+    
+    new i;
+    for(i = 1; i < (MaxClients + 1); i++)
+    {
+        if(IsClientInGameHuman(i) && GetClientTeam(i) == team)
+        {
+            humans++;
+        }
+    }
+    
+    return humans;
+}
+
+stock GetTeamMaxHumans(team)
+{
+    if(team == 2)
+    {
+        return GetConVarInt(FindConVar("survivor_limit"));
+    }
+    else if(team == 3)
+    {
+        return GetConVarInt(FindConVar("z_max_player_zombies"));
+    }
+    
+    return -1;
+}
+
+/**
+ * On report status client command.
+ *
+ * @param client        Client id that performed the command.
+ * @param command       The command performed.
+ * @param args          Number of arguments.
+ * @return              Plugin_Handled to stop command from being performed, 
+ *                      Plugin_Continue to allow the command to pass.
+ */
+public Action:Version_Command(client, const String:command[], argc)
+{
+    if (client == 0) return Plugin_Continue; // Server already have a cvar named this, return continue
+
+    if (g_bIsResultCached) // If we have a cached result
+    {
+        PrintToConsole(client, g_sResultCache); // Print cached result
+        return Plugin_Handled; // Handled
+    }
+
+    decl String:result[REPORT_STATUS_MAX_MSG_LENGTH];
+
+    Format(result, sizeof(result), "version: %s\n", READY_VERSION);
+    //Format(result, sizeof(result), "%supdated: %s%s\n", result, (IsPluginUpdated() ? "yes" : "no"));
+    Format(result, sizeof(result), "%senabled: %s\n", result, (GetConVarBool(cvarEnforceReady) ? "yes" : "no"));
+    Format(result, sizeof(result), "%slisting %i cvars:", result, (GetArraySize(g_aConVarArray) / CVAR_ARRAY_BLOCK));
+
+    decl String:name[MAX_CONVAR_NAME_LENGTH];
+    decl String:value[MAX_CONVAR_NAME_LENGTH];
+    decl String:defaultValue[MAX_CONVAR_NAME_LENGTH];
+    decl Handle:cvar;
+
+    for (new i = FIRST_CVAR_IN_ARRAY; i < GetArraySize(g_aConVarArray); i += CVAR_ARRAY_BLOCK)
+    {
+        GetArrayString(g_aConVarArray, i, name, MAX_CONVAR_NAME_LENGTH);
+        cvar = FindConVar(name);
+        if (cvar == INVALID_HANDLE) continue;
+        GetConVarString(cvar, value, MAX_CONVAR_NAME_LENGTH);
+
+        GetArrayString(g_aConVarArray, i + 1, defaultValue, MAX_CONVAR_NAME_LENGTH);
+        Format(defaultValue, MAX_CONVAR_NAME_LENGTH, "( def. \"%s\" )", defaultValue);
+
+        Format(result, sizeof(result), "%s\n \"%s\" = \"%s\" %s", result, name, value, defaultValue);
+    }
+
+    PrintToConsole(client, result);
+
+    // Cache result to prevent clients spamming this command to lag the server
+    g_sResultCache = result;
+    g_bIsResultCached = true;
+    CreateTimer(CACHE_RESULT_TIME, _RS_Cache_Timer);
+
+    return Plugin_Handled;
+}
+
+/**
+ * Called when the cached timer interval has elapsed.
+ * 
+ * @param timer         Handle to the timer object.
+ * @noreturn
+ */
+public Action:_RS_Cache_Timer(Handle:timer)
+{
+    g_bIsResultCached = false;
+}
+
+/**
+ * Adds convar to the report status array.
+ * 
+ * @param convar        Handle to convar.
+ * @noreturn
+ */
+stock AddConVarToReport(Handle:convar)
+{
+    SetupConVarArray(); // Setup array if needed
+
+    /*
+     * Get name of convar
+     */
+    decl String:name[MAX_CONVAR_NAME_LENGTH];
+    GetConVarName(convar, name, MAX_CONVAR_NAME_LENGTH);
+
+    if (FindStringInArray(g_aConVarArray, name) != -1) return; // Already in array
+
+    /*
+     * Get default value of convar
+     */
+    decl String:value[MAX_CONVAR_NAME_LENGTH], String:defaultvalue[MAX_CONVAR_NAME_LENGTH];
+    GetConVarString(convar, value, MAX_CONVAR_NAME_LENGTH);
+
+    new flags = GetConVarFlags(convar);
+    if (flags & FCVAR_NOTIFY)
+    {
+        SetConVarFlags(convar, flags ^ FCVAR_NOTIFY);
+    }
+
+    ResetConVar(convar);
+    GetConVarString(convar, defaultvalue, MAX_CONVAR_NAME_LENGTH);
+    SetConVarString(convar, value);
+    SetConVarFlags(convar, flags);
+
+    /*
+     * Push to array
+     */
+    PushArrayString(g_aConVarArray, name);
+    PushArrayString(g_aConVarArray, defaultvalue);
+}
+
+/**
+ * Adds convar to the report status array.
+ * 
+ * @param convar        Handle to convar.
+ * @noreturn
+ */
+static SetupConVarArray()
+{
+    if (g_bIsArraySetup) return;
+    g_aConVarArray = CreateArray(MAX_CONVAR_NAME_LENGTH);
+
+    g_bIsArraySetup = true;
+}
+
+/**
+ * On net info client command.
+ *
+ * @param client        Index of the client, or 0 from the server.
+ * @param args          Number of arguments that were in the argument string.
+ * @return              Plugin_Handled.
+ */
+public Action:ratesCommand(client, args)
+{
+    /* Prevent spammage of this command */
+    if (g_bCooldown[client]) return Plugin_Handled;
+    g_bCooldown[client] = true;
+
+    new const maxLen = 1024;
+    decl String:result[maxLen];
+
+    Format(result, maxLen, "\nPrinting net information about players:\n\n");
+
+    Format(result, maxLen, "%s | UID    | NAME                 | STEAMID              | PING  | RATE  | CR  | UR  |  INTERP  | IRATIO |\n", result);
+    Format(result, maxLen, "%s |--------|----------------------|----------------------|-------|-------|-----|-----|----------|--------|", result);
+
+    if (client == 0)
+    {
+        PrintToServer(result);
+    }
+    else
+    {
+        PrintToConsole(client, result);
+    }
+
+    decl uid, String:name[20], String:auth[20], Float:ping;
+    decl String:rawRate[20], String:rawCR[20], String:rawUR[20], String:rawInterp[20], String:rawIRatio[20];
+    decl rate, cmdrate, updaterate, /*Float:interp,*/ Float:interpRatio;
+    for(new i=1; i <= MaxClients; i++)
+    {
+        if(IsClientInGame(i) && !IsFakeClient(i))
+        {
+            uid = GetClientUserId(i);
+            GetClientName(i, name, 20);
+            GetClientAuthString(i, auth, 20);
+            ping = (1000.0 * GetClientAvgLatency(i, NetFlow_Outgoing)) / 2;
+
+            rate = -1;
+            if (GetClientInfo(i, "rate", rawRate, 20))
+            {
+                rate = StringToInt(rawRate);
+            }
+
+            cmdrate = -1;
+            if (GetClientInfo(i, "cl_cmdrate",rawCR, 20))
+            {
+                cmdrate = StringToInt(rawCR);
+            }
+
+            updaterate = -1;
+            if (GetClientInfo(i, "cl_updaterate", rawUR, 20))
+            {
+                updaterate = StringToInt(rawUR);
+            }
+
+            //interp = -1.0;
+            if (GetClientInfo(i, "cl_interp", rawInterp, 20))
+            {
+                Format(rawInterp, 9, rawInterp);
+                //interp = StringToFloat(rawInterp);
+            }
+
+            interpRatio = -1.0;
+            if (GetClientInfo(i, "cl_interp_ratio", rawIRatio, 20))
+            {
+                interpRatio = StringToFloat(rawIRatio);
+            }
+
+            Format(result, maxLen, " | #%-5i | %20s | %20s | %5.0f | %5i | %3i | %3i | %8s | %.4f |",
+                uid,
+                name,
+                auth,
+                ping,
+                rate,
+                cmdrate,
+                updaterate,
+                rawInterp,
+                interpRatio);
+
+            if (client == 0)
+            {
+                PrintToServer(result);
+            }
+            else
+            {
+                PrintToConsole(client, result);
+            }
+        }
+    }
+
+    Format(result, maxLen, "\nLegend:\n");
+    Format(result, maxLen, "%s UID     - UserID\n", result);
+    Format(result, maxLen, "%s NAME    - Current name of player\n", result);
+    Format(result, maxLen, "%s STEAMID - SteamID of player\n", result);
+    Format(result, maxLen, "%s PING    - Average ping\n", result);
+    Format(result, maxLen, "%s RATE    - Rate\n", result);
+    Format(result, maxLen, "%s CR      - Command rate\n", result);
+    Format(result, maxLen, "%s UR      - Upload rate\n", result);
+    Format(result, maxLen, "%s INTERP  - Interp value\n", result);
+    Format(result, maxLen, "%s IRATIO  - Interp ratio value\n", result);
+
+    if (client == 0)
+    {
+        PrintToServer(result);
+    }
+    else
+    {
+        PrintToConsole(client, result);
+    }
+
+    CreateTimer(1.0, ratesCooldownTimer, client);
+    return Plugin_Handled;
+}
+
+public Action:ratesCooldownTimer(Handle:timer, any:client)  //ZACK
+{
+    g_bCooldown[client] = false;
+    return Plugin_Stop;
 }
 
 public OnAllPluginsLoaded()
-{    
-    new bool:l4dscores = FindConVar("l4d_team_manager_ver") != INVALID_HANDLE;
-    
-    if(l4dscores || IsTargetL4D2())
+{   
+    if(FindConVar("l4d_team_manager_ver") != INVALID_HANDLE)
     {
+        // l4d scores manager plugin is loaded
+        
         // allow reready because it will fix scores when rounds are restarted?
         RegConsoleCmd("sm_reready", Command_Reready);
     }
-    
-    if(!l4dscores)
+    else
     {
         // l4d scores plugin is NOT loaded
         // supply these commands which would otherwise be done by the team manager
         
-        RegAdminCmd("sm_swap", Command_Swap, ADMFLAG_BAN, "sm_swap <player1> [player2] ... [playerN] - swap all listed players to opposite teams");
-        RegAdminCmd("sm_swap", Command_Swap, ADMFLAG_BAN, "sm_swap <player1> [player2] ... [playerN] - swap all listed players to opposite teams");
-        RegAdminCmd("sm_swapto", Command_SwapTo, ADMFLAG_BAN, "sm_swapto <player1> [player2] ... [playerN] <teamnum> - swap all listed players to <teamnum> (1,2, or 3)");
-        RegAdminCmd("sm_swapteams", Command_SwapTeams, ADMFLAG_BAN, "sm_swapteams2 - swap the players between both teams");
+        RegAdminCmd("sm_swap", Command_PlayerSwap, ADMFLAG_BAN, "sm_swap <player1> <player2> - swap player1's and player2's teams");
+        RegAdminCmd("sm_swapteams", Command_SwapTeams, ADMFLAG_BAN, "sm_swapteams - swap all the players to the opposite teams");
     }
     
     CheckDependencyVersions(/*throw*/true);
@@ -336,10 +814,130 @@ new bool:insidePluginEnd = false;
 public OnPluginEnd()
 {
     insidePluginEnd = true;
-    readyOff();    
+    
+    readyOff(); 
 }
 
-public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:angles[3], &weapon)
+public OnMapEnd()
+{
+    isSecondRound = false;  
+    
+    DebugPrintToAll("Event: Map ended.");
+}
+
+public OnMapStart()
+{
+    DebugPrintToAll("Event map started.");
+    //----
+    //allowing reready to be used again incase the map changed before timer could reset bool back to false
+    g_bCooldownReready = false;
+    //----
+    //resetting all spectator status
+    decl i;
+    for(i = 1; i <= MaxClients; i++)
+    {   
+        infectedSpectator[i] = false;                       //not infected that used !spectate
+        g_iSpectatePenaltyCounter[i] = g_iSpectatePenalty;  //counter gets reset to default
+        g_iLastRespecced[i] = 0;                            //last respecced time was never
+    }
+    //----
+    /*
+    * execute the cfg specified in l4d_ready_server_cfg
+    */
+    //if(GetConVarInt(cvarEnforceReady))
+    //{
+    decl String:cfgFile[128];
+    GetConVarString(cvarReadyServerCfg, cfgFile, sizeof(cfgFile));
+    
+    if(strlen(cfgFile) == 0)
+    {
+        return;
+    }
+    
+    decl String:cfgPath[1024];
+    BuildPath(Path_SM, cfgPath, 1024, "../../cfg/%s", cfgFile);
+    
+    if(FileExists(cfgPath))
+    {
+        DebugPrintToAll("Executing server config %s", cfgPath);
+        
+        ServerCommand("exec %s", cfgFile);
+    }
+    else
+    {
+        LogError("[SM] Could not execute server config %s, file not found", cfgPath);
+        PrintToServer("[SM] Could not execute server config %s, file not found", cfgFile);  
+        PrintToChatAll("[SM] Could not execute server config %s, file not found", cfgFile); 
+    }
+    //}
+}
+
+public bool:OnClientConnect()
+{
+    if(readyMode) 
+    {
+        checkStatus();
+    }
+    
+    return true;
+}
+
+public OnClientDisconnect()
+{
+    if(readyMode) checkStatus();
+}
+
+/*
+public _PS_OnClientPutInServer(client)
+{
+
+    g_iSpectatePenaltyCounter[client] = g_iSpectatePenalty;
+}
+*/
+
+public OnClientDisconnect_Post(client)
+{
+    infectedSpectator[client] = false;
+    g_iSpectatePenaltyCounter[client] = g_iSpectatePenalty;
+}
+
+checkStatus()
+{
+    new humans, ready;
+    decl i;
+    
+    //count number of non-bot players in-game
+    for(i = 1; i <= MaxClients; i++)
+    {
+        if(IsClientConnected(i) && !IsFakeClient(i) && IsClientInGame(i) && GetClientTeam(i) != L4D_TEAM_SPECTATE)
+        {
+            humans++;
+            if(readyStatus[i]) ready++;
+        }
+    }
+    if(humans == 0 || humans < GetConVarInt(cvarReadyMinimum))
+        return;
+    
+    if(goingLive && (humans == ready)) return;
+    else if(goingLive && (humans != ready))
+    {
+        goingLive = 0;
+        PrintHintTextToAll("Aborted going live due to player unreadying.");
+        KillTimer(liveTimer);
+    }
+    else if(!goingLive && (humans == ready))
+    {
+        if(!insideCampaignRestart)
+        {
+            goingLive = GetConVarInt(cvarReadyLiveCountdown);
+            liveTimer = CreateTimer(1.0, timerLiveCountCallback, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+        }
+    }
+    else if(!goingLive && (humans != ready)) PrintHintTextToAll("%d of %d players are ready.", ready, humans);
+    else PrintToChatAll("checkStatus bad state (tell Downtown1)");
+}
+
+public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:angles[3], &weapon)    //should prevent players from moving
 {
     if (readyMode)
     {
@@ -350,156 +948,13 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
     }
 }
 
-public OnMapEnd()
-{
-    isSecondRound = false;    
-    if (!bReadyOffCalled)
-    {
-        SetConVarInt(cvarScavengeSetup, iInitialSetupTime);
-        SetConVarFlags(cvarGod,GetConVarFlags(cvarGod) & ~FCVAR_NOTIFY);
-        SetConVarInt(cvarGod, 0);
-        SetConVarFlags(cvarGod,GetConVarFlags(cvarGod) | FCVAR_NOTIFY);
-        ResetConVar(FindConVar("director_no_mobs"));
-        ResetConVar(FindConVar("director_ready_duration"));
-        ResetConVar(FindConVar("z_common_limit"));
-        SetConVarInt(FindConVar("sv_alltalk"), iInitialAllTalk);
-        SetConVarInt(FindConVar("z_ghost_delay_max"), iInitialGhostTimeMax);
-        SetConVarInt(FindConVar("z_ghost_delay_min"), iInitialGhostTimeMin);
-        bReadyOffCalled = true;
-    }
-    if (isPaused)
-    {
-        SetConVarInt(FindConVar("sv_alltalk"), iInitialAllTalk);
-    }
-    DebugPrintToAll("Event: Map ended.");
-}
-
-public OnMapStart()
-{
-    DebugPrintToAll("Event map started.");
-    //isNewMap = true;
-    /*
-    * execute the cfg specified in l4d_ready_server_cfg
-    */
-    if (teamScores[PersistentTeam_A] > teamScores[PersistentTeam_B])
-    {
-        defaultTeams = true;
-    }
-    else if (teamScores[PersistentTeam_A] < teamScores[PersistentTeam_B])
-    {
-        defaultTeams = false;
-    }
-    if(GetConVarInt(cvarEnforceReady))
-    {
-        
-        decl String:cfgFile[128];
-        GetConVarString(cvarReadyServerCfg, cfgFile, sizeof(cfgFile));
-        
-        if(strlen(cfgFile) == 0)
-        {
-            return;
-        }
-        
-        decl String:cfgPath[1024];
-        BuildPath(Path_SM, cfgPath, 1024, "../../cfg/%s", cfgFile);
-        
-        if(FileExists(cfgPath))
-        {
-            DebugPrintToAll("Executing server config %s", cfgPath);
-            
-            ServerCommand("exec %s", cfgFile);
-        }
-        else
-        {
-            LogError("[SM] Could not execute server config %s, file not found", cfgPath);
-            PrintToServer("[SM] Could not execute server config %s, file not found", cfgFile);    
-            PrintToChatAll("[SM] Could not execute server config %s, file not found", cfgFile);    
-        }
-    }
-}
-
-public bool:OnClientConnect(client, String:rejectmsg[], size)
-{
-    if (readyMode) 
-    {
-        checkStatus();
-    }
-    
-    return true;
-}
-
-public OnClientDisconnect()
-{
-    if (readyMode) checkStatus();
-}
-
-public OnClientAuthorized(client,const String:SteamID[])
-{
-    if (GetConVarInt(cvarEnforceReady) && GetConVarInt(cvarConnectEnabled) && !IsFakeClient(client))
-    {
-        decl String:Name[128];
-        GetClientName(client, Name, sizeof(Name));
-        PrintToChatAll("[SM] %s (%s) has connected", Name, SteamID);
-    }
-}
-
-checkStatus()
-{
-    new humans, ready;
-    decl i;
-    
-    //count number of non-bot players in-game
-    for (i = 1; i < L4D_MAXCLIENTS_PLUS1; i++)
-    {
-        if (IsClientConnected(i) && !IsFakeClient(i))
-        {
-            humans++;
-            if (readyStatus[i]) ready++;
-        }
-    }
-    if(humans == 0 || humans < GetConVarInt(cvarReadyMinimum))
-        return;
-    
-    if (goingLive && (humans == ready)) return;
-    else if (goingLive && (humans != ready))
-    {
-        goingLive = 0;
-        PrintHintTextToAll("Aborted going live due to player unreadying.");
-        KillTimer(liveTimer);
-    }
-    else if (!goingLive && (humans == ready))
-    {
-        if(!insideCampaignRestart)
-        {
-            goingLive = READY_LIVE_COUNTDOWN; //TODO get from variable
-            liveTimer = CreateTimer(1.0, timerLiveCountCallback, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
-        }
-    }
-    else if (!goingLive && (humans != ready)) PrintHintTextToAll("%d of %d players are ready.", ready, humans);
-    else PrintToChatAll("checkStatus bad state (tell Downtown1)");
-}
-
-//reset the scavenge setup timer so it stays in setup indefinitely
-public Action:Timer_ResetScavengeSetup(Handle:timer)
-{
-    if(!readyMode)
-    {
-        DebugPrintToAll("Scavenge setup timer halted , leaving ready mode");
-        return Plugin_Stop;
-    }
-    
-    L4D_ScavengeBeginRoundSetupTime();
-
-    return Plugin_Continue;
-}
-
 //repeatedly count down until the match goes live
 public Action:timerLiveCountCallback(Handle:timer)
 {
     //will go live soon
-    if (goingLive)
+    if(goingLive)
     {
-        if (forcedStart) PrintHintTextToAll("Forcing match start.  An admin must 'say !abort' to abort!\nGoing live in %d seconds.", goingLive);
+        if(forcedStart) PrintHintTextToAll("Forcing match start.  An admin must 'say !abort' to abort!\nGoing live in %d seconds.", goingLive);
         else PrintHintTextToAll("All players ready.  Say !unready now to abort!\nGoing live in %d seconds.", goingLive);
         goingLive--;
     }
@@ -508,35 +963,30 @@ public Action:timerLiveCountCallback(Handle:timer)
     {
         //readyOff();
         
-        if(ShouldResetRoundTwiceToGoLive())
+        if(GetConVarBool(cvarReadyRestartRound) && !GetConVarBool(cvarReadyUpStyle))
         {
             PrintHintTextToAll("Match will be live after 2 round restarts.");
             
             insideCampaignRestart = 2;
             RestartCampaignAny();
+            
+            //      CreateTimer(4.0, timerLiveMessageCallback, _, _);
+            //SDKCall(restartScenario, gConf, "Director", 1);
+            //HookEvent("round_start", eventRSLiveCallback);
+            //SDKCall(restartScenario, gConf, "Director", 1);
         }
-        else     // scavenge mode, reready -- DO NOT reset the round twice
+        else
         {
-            RoundEndBeforeLive();
-            RoundIsLive();
+            //dev
+            readyOff();
+            UnfreezeAllPlayers();
+            CreateTimer(1.0, timerLiveMessageCallback, _, _);
         }
         
         return Plugin_Stop;
     }
     
     return Plugin_Continue;
-}
-
-bool:ShouldResetRoundTwiceToGoLive()
-{
-    if(IsTargetL4D1())
-        return true;
-    
-    if(inWarmUp)    //scavenge pre-first round warmup
-        return true;
-    
-    //do not reset the round for L4D2 versus or L4D2 scavenge reready
-    return false;
 }
 
 public Action:eventRoundEndCallback(Handle:event, const String:name[], bool:dontBroadcast)
@@ -551,7 +1001,7 @@ public Action:eventRoundEndCallback(Handle:event, const String:name[], bool:dont
         if(!isSecondRound)
             DebugPrintToAll("[DEBUG] Second round detected.");
         else
-            DebugPrintToAll("[DEBUG] End of second round detected.");
+        DebugPrintToAll("[DEBUG] End of second round detected.");
         #endif
         isSecondRound = true;
     }
@@ -583,17 +1033,13 @@ public Action:eventRSLiveCallback(Handle:event, const String:name[], bool:dontBr
         //first restart, do one more
         if(insideCampaignRestart == 1) 
         {
-#if READY_RESTART_ROUND_DELAY
             CreateTimer(READY_RESTART_ROUND_DELAY, timerOneRoundRestart, _, _);
-#else //with RestartScenarioFromVote there is no need to have a delay
-            RestartCampaignAny();
-#endif
             
             //PrintHintTextToAll("Match will be live after 1 round restart.");
             
         }
         //last restart, match is now live!
-        else if (insideCampaignRestart == 0)
+        else if(insideCampaignRestart == 0)
         {
             RoundIsLive();
         }
@@ -610,7 +1056,7 @@ public Action:eventRSLiveCallback(Handle:event, const String:name[], bool:dontBr
     //our code will just enable ready mode at the start of a round
     //if the cvar is set to it
     if(GetConVarInt(cvarEnforceReady)
-    && (!isSecondRound || GetConVarInt(cvarReadyHalves) || pauseBetweenHalves)) 
+    && (!isSecondRound || GetConVarInt(cvarReadyHalves) || pauseBetweenHalves || GetConVarInt(cvarReadyUpStyle))) 
     {
         #if READY_DEBUG
         DebugPrintToAll("[DEBUG] Calling comPready, pauseBetweenHalves = %d", pauseBetweenHalves);
@@ -634,17 +1080,17 @@ public Action:timerOneRoundRestart(Handle:timer)
 }
 
 public Action:timerLiveMessageCallback(Handle:timer)
-{
+{   
     PrintHintTextToAll("Match is LIVE!");
     
-    if(GetConVarInt(cvarReadyHalves) || isSecondRound)
-    {
-        PrintToChatAll("[SM] Match is LIVE!");
-    }
-    else
-    {
-        PrintToChatAll("[SM] Match is LIVE for both halves, say !reready to request a ready-up before the next half.");
-    }
+    //if(GetConVarInt(cvarReadyHalves) || isSecondRound)
+    //{
+    PrintToChatAll("[SM] Match is LIVE!");
+    //}
+    //else
+    //{
+    //  PrintToChatAll("[SM] Match is LIVE for both halves, say !reready to request a ready-up before the next half.");
+    //}
     
     return Plugin_Stop;
 }
@@ -667,9 +1113,9 @@ public Action:timerUnreadyCallback(Handle:timer)
     //new minPlayers = GetConVarInt(cvarReadyMinimum);
     
     decl i;
-    for (i = 1; i < L4D_MAXCLIENTS_PLUS1; i++)
+    for(i = 1; i <= MaxClients; i++)
     {
-        if (IsClientInGameHuman(i)) 
+        if(IsClientInGameHuman(i)) 
         {
             //use panel for ready up stuff?
             if(!readyStatus[i])
@@ -681,27 +1127,13 @@ public Action:timerUnreadyCallback(Handle:timer)
                 PrintHintText(i, "You are ready.\n\nSay !unready in chat if no longer ready.");
             }
         }
+        else if(IsClientInGameHumanSpec(i) && GetClientTeam(i) == L4D_TEAM_SPECTATE)
+        {
+            PrintHintText(i, "You are spectating.");
+        }
     }
     
     DrawReadyPanelList();
-    if (inWarmUp)
-    {
-        new ent = -1;
-        new prev = 0;
-        while ((ent = FindEntityByClassname(ent, "weapon_gascan")) != -1)
-        {
-            if (prev)
-            {
-                RemoveEdict(prev);
-            }
-            prev = ent;
-        }
-        if (prev)
-        {
-            RemoveEdict(prev);
-        }
-        DebugPrintToAll("Removed all gas cans");
-    }
     
     return Plugin_Continue;
 }
@@ -723,15 +1155,13 @@ public Action:eventSpawnReadyCallback(Handle:event, const String:name[], bool:do
     
     new player = GetClientOfUserId(GetEventInt(event, "userid"));
     
-    if (!inWarmUp)
-    {
-        #if READY_DEBUG
-        new String:curname[128];
-        GetClientName(player,curname,128);
-        DebugPrintToAll("[DEBUG] Spawned %s [%d], freezing.", curname, player);
-        #endif
-        ToggleFreezePlayer(player, true);
-    }
+    #if READY_DEBUG
+    new String:curname[128];
+    GetClientName(player,curname,128);
+    DebugPrintToAll("[DEBUG] Spawned %s [%d], freezing.", curname, player);
+    #endif
+    
+    ToggleFreezePlayer(player, true);
     return Plugin_Handled;
 }
 
@@ -767,50 +1197,19 @@ public Action:L4D_OnSpawnWitch(const Float:vector[3], const Float:qangle[3])
     }
 }
 
-public Action:L4D_OnFirstSurvivorLeftSafeArea(client)
-{
-    if(readyMode && IsVersusMode())
-    {
-        /*
-        * prevent the automatic 90 second force versus start
-        *   this means SI will be able to spawn as normal
-        *   and there will not be a random horde as soon as it goes live
-        */
-        DebugPrintToAll("Blocking OnFirstSurvivorLeftSafeArea...");
-        return Plugin_Handled;
-    }
-
-    return Plugin_Continue;
-}
-
-public Action:L4D_OnSetCampaignScores(&scoreA, &scoreB)
-{
-    teamScores[PersistentTeam_A] = scoreA;
-    teamScores[PersistentTeam_B] = scoreB;
-    if (!scoreA && !scoreB)
-    {
-        defaultTeams = true;
-        isNewMap = true;
-    }
-    return Plugin_Continue;
-}
 
 public Action:Event_TankSpawn(Handle:event, const String:name[], bool:dontBroadcast)
 {
-    /* print notify warning since OnTankSpawn block isn't working on Windows/L4D2 */
-    if(readyMode && IsVersusMode())
-    {
-        PrintToChatAll("[ERROR] A tank has spawned during ready-up mode, a map restart may be needed");
-    }
+/*  new tankid = GetEventInt(event, "tankid");
+    new player = GetClientOfUserId(GetEventInt(event, "userid"));
+    
+    new String:curname[128];
+    GetClientName(player,curname,128);*/
 }
 
 public Action:Event_WitchSpawn(Handle:event, const String:name[], bool:dontBroadcast)
-{
-    /* print notify warning since OnWitchSpawn block isn't working on Windows/L4D2 */
-    if(readyMode && IsVersusMode())
-    {
-        PrintToChatAll("[ERROR] A witch has spawned during ready-up mode, a map restart may be needed");
-    }
+{/* new witchid = GetEventInt(event, "witchid");
+    new client = GetClientOfUserId(witchid);*/
 }
 
 public Action:Event_PlayerLeftStartArea(Handle:event, const String:name[], bool:dontBroadcast)
@@ -820,10 +1219,10 @@ public Action:Event_PlayerLeftStartArea(Handle:event, const String:name[], bool:
 //When a player replaces a bot (i.e. player joins survivors team)
 public Action:eventBotPlayerReplaceCallback(Handle:event, const String:name[], bool:dontBroadcast)
 {
-    //    new bot = GetClientOfUserId(GetEventInt(event, "bot"));
+    //  new bot = GetClientOfUserId(GetEventInt(event, "bot"));
     new player = GetClientOfUserId(GetEventInt(event, "player"));
     
-    if(readyMode && !inWarmUp)
+    if(readyMode)
     {
         //called when player joins survivor....?
         #if READY_DEBUG
@@ -840,7 +1239,7 @@ public Action:eventBotPlayerReplaceCallback(Handle:event, const String:name[], b
         new String:curname[128];
         GetClientName(player,curname,128);
         DebugPrintToAll("[DEBUG] Player %s [%d] replacing bot, doing nothing.", curname, player);
-        #endif    
+        #endif  
     }
     
     return Plugin_Handled;
@@ -852,9 +1251,9 @@ public Action:eventPlayerBotReplaceCallback(Handle:event, const String:name[], b
 {
     
     new player = GetClientOfUserId(GetEventInt(event, "player"));
-    //    new bot = GetClientOfUserId(GetEventInt(event, "bot"));
+    //  new bot = GetClientOfUserId(GetEventInt(event, "bot"));
     
-    if(readyMode && !inWarmUp)
+    if(readyMode)
     {
         #if READY_DEBUG
         new String:curname[128];
@@ -871,10 +1270,28 @@ public Action:eventPlayerBotReplaceCallback(Handle:event, const String:name[], b
         new String:curname[128];
         GetClientName(player,curname,128);
         DebugPrintToAll("[DEBUG] Bot replacing player %s [%d], doing nothing.", curname, player);
-        #endif    
+        #endif  
     }
     
     return Plugin_Handled;
+}
+
+//When a player changes team
+public Action:eventPlayerTeamCallback(Handle:event, const String:name[], bool:dontBroadcast)
+{
+    #if READY_DEBUG
+    new player = GetClientOfUserId(GetEventInt(event, "player"));
+    new String:curname[128];
+    GetClientName(player,curname,128);
+    
+    DebugPrintToAll("[DEBUG] Player %s changing team.", curname);
+    #endif
+    
+    if(readyMode)
+    {
+        DrawReadyPanelList();
+        checkStatus();
+    }
 }
 
 //When a player gets hurt during ready mode, block all damage
@@ -942,7 +1359,7 @@ public ConVarChange_DirectorNoBosses(Handle:convar, const String:oldValue[], con
 
 public Action:SendVoteRestartPassed(client, args)
 {
-    new Handle:event = CreateEvent("vote_passed");    
+    new Handle:event = CreateEvent("vote_passed");  
     if(event == INVALID_HANDLE) 
     {
         return;
@@ -959,7 +1376,7 @@ public Action:SendVoteRestartPassed(client, args)
 
 public Action:SendVoteRestartStarted(client, args)
 {
-    new Handle:event = CreateEvent("vote_started");    
+    new Handle:event = CreateEvent("vote_started"); 
     if(event == INVALID_HANDLE) 
     {
         return;
@@ -977,22 +1394,16 @@ public Action:SendVoteRestartStarted(client, args)
 
 public Action:FakeRestartVoteCampaign(client, args)
 {
-    if (IsTargetL4D2())
-    {
-        ReplyToCommand(client, "restartround is not supported in L4D2");
-        return Plugin_Handled;
-    }
     //re-enable ready mode after the restart
     pauseBetweenHalves = 1;
     
     RestartCampaignAny();
     PrintToChatAll("[SM] Round manually restarted.");
     DebugPrintToAll("[SM] Round manually restarted.");
-    return Plugin_Handled;
 }
 
 RestartCampaignAny()
-{    
+{   
     decl String:currentmap[128];
     GetCurrentMap(currentmap, sizeof(currentmap));
     
@@ -1005,13 +1416,12 @@ RestartCampaignAny()
 }
 
 public Action:CommandRestartMap(client, args)
-{    
-    if(!isMapRestartPending)
+{   
+    if((!isMapRestartPending) || (isMapRestartPending))
     {
         PrintToChatAll("[SM] Map resetting in %.0f seconds.", READY_RESTART_MAP_DELAY);
         RestartMapDelayed();
     }
-    
     return Plugin_Handled;
 }
 
@@ -1058,7 +1468,7 @@ public Action:callVote(client, args)
     new String:votetype[32];
     GetCmdArg(1,votetype,32);
     
-    if (strcmp(votetype,"RestartGame",false) == 0)
+    if(strcmp(votetype,"RestartGame",false) == 0)
     {
         #if READY_DEBUG
         DebugPrintToAll("[DEBUG] Vote on RestartGame called");
@@ -1071,34 +1481,182 @@ public Action:callVote(client, args)
 
 public Action:Command_Spectate(client, args)
 {
-    if(IsPlayerAlive(client) && GetClientTeam(client) == L4D_TEAM_INFECTED)
-    {
-        ForcePlayerSuicide(client);
-    }
     if(GetClientTeam(client) != L4D_TEAM_SPECTATE)
     {
-        ChangePlayerTeam(client, L4D_TEAM_SPECTATE);
-        PrintToChatAll("[SM] %N has become a spectator.", client);
+        if(GetClientTeam(client) == L4D_TEAM_SURVIVORS) //someone can't swap to survivor team to get reduced spawn timers
+        {
+            ChangePlayerTeam(client, L4D_TEAM_SPECTATE);
+            PrintToChat(client, "[SM] You are now spectating.");
+        }
+        if(GetClientTeam(client) == L4D_TEAM_INFECTED)
+        {
+            if(readyMode || infectedSpectator[client])                              //if game is in ready up, allow normal spectate, or player is already an inf/spectator
+            {
+                ChangePlayerTeam(client, L4D_TEAM_SPECTATE);
+                PrintToChat(client, "[SM] You are now spectating.");
+            }
+            else
+            {
+                if(g_iSpectatePenalty > -1)
+                {
+                    infectedSpectator[client] = true;
+                    ChangePlayerTeam(client, L4D_TEAM_SPECTATE);
+                    CreateTimer(1.0, Timer_InfectedSpectate, client, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE); // Start unpause countdown
+                }
+                else
+                {
+                    ChangePlayerTeam(client, L4D_TEAM_SPECTATE);
+                    PrintToChat(client, "[SM] You are now spectating.");
+                }
+            }
+        }       
     }
     //respectate trick to get around spectator camera being stuck
     else
     {
+        g_bIsSpectating[client] = true;
         ChangePlayerTeam(client, L4D_TEAM_INFECTED);
         CreateTimer(0.1, Timer_Respectate, client, TIMER_FLAG_NO_MAPCHANGE);
+    }
+    
+    if(readyMode)
+    {
+        DrawReadyPanelList();
+        checkStatus();
     }
 
     return Plugin_Handled;
 }
 
+public Action:Respec_Client(client, args)
+{
+    if (client == 0)
+    {
+        PrintToServer("[SM] sm_respec cannot be used by server.");
+        return Plugin_Handled;
+    }
+    
+    if (GetClientTeam(client) != 3 || g_bIsSpectating[client])
+    {
+        ReplyToCommand(client, "[SM] Can only be used by the Infected.");
+        return Plugin_Handled;
+    }
+    
+    if(args < 1)
+    {
+        ReplyToCommand(client, "[SM] Usage: sm_respec <player> - force the player to respectate.");     
+        return Plugin_Handled;
+    }
+    
+    decl String:target[64];
+    GetCmdArgString(target, sizeof(target));
+    
+    new tclient = FindTarget(client, target, true /*nobots*/, false /*immunity*/);
+    if (tclient == -1) return Plugin_Handled;
+    
+    decl String:respecClient[64];
+    GetClientName(client, respecClient, sizeof(respecClient));
+    
+    decl String:respecTarget[64];
+    GetClientName(tclient, respecTarget, sizeof(respecTarget));
+        
+    if (GetClientTeam(tclient) != L4D_TEAM_SPECTATE)
+    {
+        ReplyToCommand(client, "[SM] %s is not a spectator.", respecTarget);
+        return Plugin_Handled;
+    }
+    else if (g_bIsSpectating[tclient])
+    {
+        ReplyToCommand(client, "[SM] %s is already being respecced.", respecTarget);
+        return Plugin_Handled;
+    }
+    
+    new curtime = GetTime();
+    
+    new tdiff = (g_iLastRespecced[tclient] + g_iRespecCooldownTime) - curtime;
+    
+    if (tdiff > 0)
+    {
+        ReplyToCommand(client, "[SM] %s cannot be respecced for another %i second(s), you must wait.", respecTarget, tdiff);
+        return Plugin_Handled;
+    }
+    
+    g_iLastRespecced[tclient] = curtime;
+    
+    g_bIsSpectating[tclient] = true;
+    
+    ChangePlayerTeam(tclient, 3);
+    CreateTimer(0.1, Timer_Respec_A, tclient, TIMER_FLAG_NO_MAPCHANGE); //spec
+    CreateTimer(0.6, Timer_Respec_B, tclient, TIMER_FLAG_NO_MAPCHANGE); //inf
+    CreateTimer(0.7, Timer_Respec_C, tclient, TIMER_FLAG_NO_MAPCHANGE); //spec + reset spectating[tclient] = false;
+    PrintToChat(tclient, "[SM] %s has forced you to respectate.", respecClient);
+    PrintToChat(client, "[SM] %s has been forced to respectate.", respecTarget);
+    
+    return Plugin_Handled;
+}
+
+public Action:Timer_Respec_A(Handle:timer, any:tclient)
+{
+    ChangeClientTeam(tclient, 1);
+}
+
+public Action:Timer_Respec_B(Handle:timer, any:tclient)
+{
+    ChangeClientTeam(tclient, 3);
+}
+
+public Action:Timer_Respec_C(Handle:timer, any:tclient)
+{
+    ChangeClientTeam(tclient, 1);
+    g_bIsSpectating[tclient] = false;   
+}
+
+public Action:Timer_InfectedSpectate(Handle:timer, any:client)
+{
+    static bClientJoinedInfected = false;       //did the client try to join the infected?
+    
+    if (!infectedSpectator[client] || !IsClientInGame(client) || IsFakeClient(client)) return Plugin_Stop; //if client disconnected or is fake client
+    
+    if (g_iSpectatePenaltyCounter[client] != 0)
+    {
+        if (GetClientTeam(client) == L4D_TEAM_INFECTED)
+        {
+            ChangePlayerTeam(client, L4D_TEAM_SPECTATE);
+            PrintToChat(client, "[SM] You can join the infected team again in %d seconds", g_iSpectatePenaltyCounter[client]);
+            bClientJoinedInfected = true;   //client tried to join the infected again when not allowed
+        }
+        g_iSpectatePenaltyCounter[client]--;
+        return Plugin_Continue;
+    }
+    else if (g_iSpectatePenaltyCounter[client] == 0)
+    {
+        if (GetClientTeam(client) == L4D_TEAM_INFECTED)
+        {
+            ChangePlayerTeam(client, L4D_TEAM_SPECTATE);
+            bClientJoinedInfected = true;
+        }
+        if (GetClientTeam(client) == L4D_TEAM_SPECTATE && bClientJoinedInfected)
+        {
+            PrintToChat(client, "[SM] You can now join the infected team again.");  //only print this hint text to the spectator if he tried to join the infected team, and got swapped before
+        }
+        infectedSpectator[client] = false;
+        bClientJoinedInfected = false;
+        g_iSpectatePenaltyCounter[client] = g_iSpectatePenalty;
+        return Plugin_Stop;
+    }
+    return Plugin_Continue;
+}
+
 public Action:Timer_Respectate(Handle:timer, any:client)
 {
     ChangePlayerTeam(client, L4D_TEAM_SPECTATE);
-    PrintToChatAll("[SM] %N has become a spectator (again).", client);
+    PrintToChat(client, "[SM] You are now spectating (again).");
+    g_bIsSpectating[client] = false;
 }
 
 public Action:Command_Unfreezeme1(client, args)
 {
-    SetEntityMoveType(client, MOVETYPE_NOCLIP);    
+    SetEntityMoveType(client, MOVETYPE_NOCLIP); 
     PrintToChatAll("Unfroze %N with noclip");
     
     return Plugin_Handled;
@@ -1106,7 +1664,7 @@ public Action:Command_Unfreezeme1(client, args)
 
 public Action:Command_Unfreezeme2(client, args)
 {
-    SetEntityMoveType(client, MOVETYPE_OBSERVER);    
+    SetEntityMoveType(client, MOVETYPE_OBSERVER);   
     PrintToChatAll("Unfroze %N with observer");
     
     return Plugin_Handled;
@@ -1114,7 +1672,7 @@ public Action:Command_Unfreezeme2(client, args)
 
 public Action:Command_Unfreezeme3(client, args)
 {
-    SetEntityMoveType(client, MOVETYPE_WALK);    
+    SetEntityMoveType(client, MOVETYPE_WALK);   
     PrintToChatAll("Unfroze %N with WALK");
     
     return Plugin_Handled;
@@ -1123,7 +1681,7 @@ public Action:Command_Unfreezeme3(client, args)
 
 public Action:Command_Unfreezeme4(client, args)
 {
-    SetEntityMoveType(client, MOVETYPE_CUSTOM);    
+    SetEntityMoveType(client, MOVETYPE_CUSTOM); 
     PrintToChatAll("Unfroze %N with customs");
     
     return Plugin_Handled;
@@ -1134,175 +1692,107 @@ public Action:printClients(client, args)
 {
     
     decl i;
-    for (i = 1; i < L4D_MAXCLIENTS_PLUS1; i++)
+    for(i = 1; i <= MaxClients; i++)
     {
-        if (IsClientInGame(i)) 
+        if(IsClientInGame(i)) 
         {
             new String:curname[128];
             GetClientName(i,curname,128);
             DebugPrintToAll("[DEBUG] Player %s with client id [%d]", curname, i);
         }
-    }    
+    }   
 }
 
 public Action:Command_Say(client, args)
 {
-    if (args < 1 || (!readyMode && !isPaused))
+    if(args < 1)
     {
         return Plugin_Continue;
     }
-    
+        
     decl String:sayWord[MAX_NAME_LENGTH];
     GetCmdArg(1, sayWord, sizeof(sayWord));
     
-    new idx = StrContains(sayWord, "notready", false);
-    if(idx == 1)
+    if(StrEqual(sayWord, "!rates", true))
     {
-        readyDown(client, args);
+        PrintToChat(client, "[SM] Check the console for players rates.");
+        return Plugin_Handled;
+    }
+    if(StrEqual(sayWord, "/rates", true))
+    {
+        PrintToChat(client, "[SM] Check the console for players rates.");
         return Plugin_Handled;
     }
     
-    idx = StrContains(sayWord, "n", false);
-    if(idx == 1)
-    {
-        readyDown(client, args);
-        return Plugin_Handled;
-    }
+    if (!readyMode) return Plugin_Continue;
     
-    idx = StrContains(sayWord, "unready", false);
-    if(idx == 1)
-    {
-        readyDown(client, args);
-        return Plugin_Handled;
-    }
-    
-    idx = StrContains(sayWord, "u", false);
-    if(idx == 1)
-    {
-        readyDown(client, args);
-        return Plugin_Handled;
-    }
-    
-    idx = StrContains(sayWord, "ready", false);
-    if(idx == 1)
+    if(StrEqual(sayWord, "!r", false))
     {
         readyUp(client, args);
         return Plugin_Handled;
     }
-    
-    idx = StrContains(sayWord, "r", false);
-    if(idx == 1)
+    else if(StrEqual(sayWord, "/r", false))
     {
         readyUp(client, args);
         return Plugin_Handled;
     }
-    
-    if (isPaused) //Do our own chat output when the game is paused
+    else if(StrEqual(sayWord, "!ready", false))
     {
-        decl String:sText[256];
-        GetCmdArg(1, sText, sizeof(sText));
-        if (client == 0 || (IsChatTrigger() && sText[0] == '/')) //Ignore if it is a server message or a silent chat trigger
-        {
-            return Plugin_Continue;
-        }
-        
-        PrintToChatAll("\x03%N\x01 : %s", client, sText); //Display the users message
-        return Plugin_Handled; //Since the issue only occurs sometimes we need to block default output to prevent showing text twice
+        readyUp(client, args);
+        return Plugin_Handled;
     }
+    else if(StrEqual(sayWord, "/ready", false))
+    {
+        readyUp(client, args);
+        return Plugin_Handled;
+    }
+    else if(StrEqual(sayWord, "!notready", false))
+    {
+        readyDown(client, args);
+        return Plugin_Handled;
+    }
+    else if(StrEqual(sayWord, "/notready", false))
+    {
+        readyDown(client, args);
+        return Plugin_Handled;
+    }
+    else if(StrEqual(sayWord, "!n", false))
+    {
+        readyDown(client, args);
+        return Plugin_Handled;
+    }
+    else if(StrEqual(sayWord, "/n", false))
+    {
+        readyDown(client, args);
+        return Plugin_Handled;
+    }
+    else if(StrEqual(sayWord, "!unready", false))
+    {
+        readyDown(client, args);
+        return Plugin_Handled;
+    }
+    else if(StrEqual(sayWord, "/unready", false))
+    {
+        readyDown(client, args);
+        return Plugin_Handled;
+    }
+    else if(StrEqual(sayWord, "!u", false))
+    {
+        readyDown(client, args);
+        return Plugin_Handled;
+    }
+    else if(StrEqual(sayWord, "/u", false))
+    {
+        readyDown(client, args);
+        return Plugin_Handled;
+    }
+    
     return Plugin_Continue;
 }
-public Action:Command_Teamsay(client, args)
-{
-    if (args < 1 || (!readyMode && !isPaused))
-    {
-        return Plugin_Continue;
-    }
-    
-    decl String:sayWord[MAX_NAME_LENGTH];
-    GetCmdArg(1, sayWord, sizeof(sayWord));
-    
-    new idx = StrContains(sayWord, "notready", false);
-    if(idx == 1)
-    {
-        readyDown(client, args);
-        return Plugin_Handled;
-    }
-    
-    idx = StrContains(sayWord, "n", false);
-    if(idx == 1)
-    {
-        readyDown(client, args);
-        return Plugin_Handled;
-    }
-    
-    idx = StrContains(sayWord, "unready", false);
-    if(idx == 1)
-    {
-        readyDown(client, args);
-        return Plugin_Handled;
-    }
-    
-    idx = StrContains(sayWord, "u", false);
-    if(idx == 1)
-    {
-        readyDown(client, args);
-        return Plugin_Handled;
-    }
-    
-    idx = StrContains(sayWord, "ready", false);
-    if(idx == 1)
-    {
-        readyUp(client, args);
-        return Plugin_Handled;
-    }
-    
-    idx = StrContains(sayWord, "r", false);
-    if(idx == 1)
-    {
-        readyUp(client, args);
-        return Plugin_Handled;
-    }
-    
-    if (isPaused) //Do our own chat output when the game is paused
-    {
-        decl String:sText[256];
-        GetCmdArg(1, sText, sizeof(sText));
-        if (client == 0 || (IsChatTrigger() && sText[0] == '/')) //Ignore if it is a server message or a silent chat trigger
-        {
-            return Plugin_Continue;
-        }
-        
-        decl String:sTeamName[16];
-        new iTeam = GetClientTeam(client);
-        if (iTeam == 3)
-        {
-            sTeamName = "Infected";
-        }
-        else if (iTeam == 2)
-        {
-            sTeamName = "Survivor";
-        }
-        else
-        {
-            sTeamName = "Spectator";
-        }
-        for (new i = 1; i <= MaxClients; i++) 
-        {
-            if (IsClientConnected(i) && IsClientInGame(i) && !IsFakeClient(i))
-            {
-                if (GetClientTeam(i) == iTeam) //Is teamchat so only display it to people on the same team
-                {
-                    PrintToChat(i, "\x01(%s) \x03%N\x01 : %s", sTeamName, client, sText); //Display the users message
-                }
-            }
-        }
-        return Plugin_Handled; //Since the issue only occurs sometimes we need to block default output to prevent showing text twice
-    }
-    return Plugin_Continue;
-}
+
 public Action:readyUp(client, args)
 {
-    if (!readyMode || readyStatus[client]) return Plugin_Handled;
+    if(!readyMode || readyStatus[client] || GetClientTeam(client) == L4D_TEAM_SPECTATE || g_bIsSpectating[client]) return Plugin_Handled;
     
     //don't allow readying up if there's too few players
     new realPlayers = CountInGameHumans();
@@ -1327,7 +1817,7 @@ public Action:readyUp(client, args)
 
 public Action:readyDown(client, args)
 {
-    if (!readyMode || !readyStatus[client]) return Plugin_Handled;
+    if(!readyMode || !readyStatus[client] || GetClientTeam(client) == L4D_TEAM_SPECTATE || g_bIsSpectating[client]) return Plugin_Handled;
     if(isCampaignBeingRestarted || insideCampaignRestart) return Plugin_Handled;
     
     decl String:name[MAX_NAME_LENGTH];
@@ -1341,35 +1831,71 @@ public Action:readyDown(client, args)
     
     return Plugin_Handled;
 }
-public Action:Command_Unpause(client, args)
-{
-    if (isPaused)
-    {
-        return Plugin_Handled;
-    }
-    return Plugin_Continue;
-}
+
 public Action:Command_Reready(client, args)
 {
-    if (readyMode) return Plugin_Handled;
+    if(readyMode || !g_bAllowReready || GetConVarBool(cvarReadyUpStyle)) return Plugin_Handled;
     
-    /*if(IsTargetL4D2() && !IsScavengeMode())
+    if(GetClientTeam(client) == L4D_TEAM_SPECTATE || g_bIsSpectating[client] == true)
     {
-        PrintToChatAll("[SM] Reready is only supported for scavenge mode.");
-    
+        PrintToChat(client, "[SM] Only players can use !reready.");
         return Plugin_Handled;
-    }*/
+    }
+    if(g_bCooldownReready) return Plugin_Handled;
     
+    decl String:name[64];
+    decl String:who[32];
+    GetClientName(client, name, 64);
+    
+    if(GetClientTeam(client) == L4D_TEAM_SURVIVORS)
+    {
+        Format(who, 32, "Survivors");
+    }
+    if(GetClientTeam(client) == L4D_TEAM_INFECTED)
+    {
+        Format(who, 32, "Infected");
+    }
+    //printing to admins who invoked the !reready
+    //and to non admins if it was the infected or survivor team
+    for(new i=1; i <= MaxClients; i++)
+    {
+        if(IsClientInGame(i) && !IsFakeClient(i))
+        {
+            if(GetUserAdmin(i) != INVALID_ADMIN_ID) PrintToChat(i, "[SM] %s used !reready.", name);
+            else PrintToChat(i, "[SM] The %s have requested a !reready.", who);
+        }
+    }
     pauseBetweenHalves = 1;
     PrintToChatAll("[SM] Match will pause at the end of this half and require readying up again.");
     
     return Plugin_Handled;
 }
 
+public Action:Command_Unreready(client, args)
+{
+    if(readyMode || !g_bAllowReready || GetConVarBool(cvarReadyUpStyle)) return Plugin_Handled;
+
+    if(pauseBetweenHalves == 0)
+    {
+        PrintToChat(client, "[SM] No !reready to undo.");
+        return Plugin_Handled;
+    }
+    PrintToChatAll("[SM] Match will no longer pause at the end of this half and require readying up again.");
+    pauseBetweenHalves = 0;
+    g_bCooldownReready = true;
+    CreateTimer(30.0, Timer_Cooldown_Reready, TIMER_FLAG_NO_MAPCHANGE); 
+    return Plugin_Handled;
+}
+
+public Action:Timer_Cooldown_Reready(Handle:timer)
+{
+    g_bCooldownReready = false;
+}
+
 
 public Action:readyWho(client, args)
 {
-    if (!readyMode) return Plugin_Handled;
+    if(!readyMode) return Plugin_Handled;
     
     decl String:readyPlayers[1024];
     decl String:unreadyPlayers[1024];
@@ -1381,7 +1907,7 @@ public Action:readyWho(client, args)
     new numPlayers2 = 0;
     
     new i;
-    for(i = 1; i < L4D_MAXCLIENTS_PLUS1; i++) 
+    for(i = 1; i <= MaxClients; i++) 
     {
         if(IsClientInGameHuman(i)) 
         {
@@ -1428,8 +1954,8 @@ public Action:readyWho(client, args)
 //draws a menu panel of ready and unready players
 DrawReadyPanelList()
 {
-    if (!readyMode) return;
-    //static bool:scrollingText;
+    if(!readyMode) return;
+    
     /*
     #if READY_DEBUG
     DebugPrintToAll("[DEBUG] Drawing the ready panel");
@@ -1448,7 +1974,7 @@ DrawReadyPanelList()
     new ready, unready, specs;
     
     new i;
-    for(i = 1; i < L4D_MAXCLIENTS_PLUS1; i++) 
+    for(i = 1; i <= MaxClients; i++) 
     {
         if(IsClientInGameHuman(i)) 
         {
@@ -1457,9 +1983,9 @@ DrawReadyPanelList()
             else
                 unready++;
         }
-        else if(Is_Client_Player_Spectator(i))
+        else if(IsClientInGameHumanSpec(i) && GetClientTeam(i) == L4D_TEAM_SPECTATE)
         {
-            specs ++;
+            specs++;
         }
     }
     
@@ -1467,12 +1993,13 @@ DrawReadyPanelList()
     
     if(ready)
     {
+        
         DrawPanelText(panel, "READY");
         
         //->%d. %s makes the text yellow
         // otherwise the text is white
         
-        for(i = 1; i < L4D_MAXCLIENTS_PLUS1; i++) 
+        for(i = 1; i <= MaxClients; i++) 
         {
             if(IsClientInGameHuman(i)) 
             {
@@ -1496,7 +2023,7 @@ DrawReadyPanelList()
     {
         DrawPanelText(panel, "NOT READY");
         
-        for(i = 1; i < L4D_MAXCLIENTS_PLUS1; i++) 
+        for(i = 1; i <= MaxClients; i++) 
         {
             if(IsClientInGameHuman(i)) 
             {
@@ -1521,7 +2048,7 @@ DrawReadyPanelList()
         
         for(i = 1; i <= MaxClients; i++)
         {
-            if(Is_Client_Player_Spectator(i))
+            if(IsClientInGameHumanSpec(i) && GetClientTeam(i) == L4D_TEAM_SPECTATE)
             {
                 GetClientName(i, name, sizeof(name));
                 
@@ -1545,11 +2072,40 @@ DrawReadyPanelList()
     DrawPanelText(panel, Notice);
 #endif
     
-    for (i = 1; i < L4D_MAXCLIENTS_PLUS1; i++) 
+    for(i = 1; i <= MaxClients; i++) 
     {
-        if(Is_Valid_Player_Client(i)) 
+        if(IsClientInGameHumanSpec(i)) 
         {
             SendPanelToClient(panel, i, Menu_ReadyPanel, READY_LIST_PANEL_LIFETIME);
+            
+            /*
+            //some other menu was open during this time?
+            if(menuInterrupted[i])
+            {
+                //if the menu is still up, dont refresh
+                if(GetClientMenu(i))
+                {
+                    DebugPrintToAll("MENU: Will not draw to %N, has menu open (and its not ours)", i);
+                    continue;
+                }
+                else
+                {
+                    menuInterrupted[i] = false;
+                }
+            }
+            //send to client if he doesnt have menu already
+            //this menu will be refreshed automatically from timeout callback
+            if(!GetClientMenu(i))
+                SendPanelToClient(panel, i, Menu_ReadyPanel, READY_LIST_PANEL_LIFETIME);
+            else
+                DebugPrintToAll("MENU: Will not draw to %N, has menu open (and it could be ours)", i);
+            */
+            
+            /*
+            #if READY_DEBUG
+            PrintToChat(i, "[DEBUG] You have been sent the Panel.");
+            #endif
+            */
         }
     }
     
@@ -1574,7 +2130,7 @@ public Menu_ReadyPanel(Handle:menu, MenuAction:action, param1, param2)
         return;
     }
     
-    if (action == MenuAction_Cancel) {
+    if(action == MenuAction_Cancel) {
         new reason = param2;
         new client = param1;
 
@@ -1594,22 +2150,38 @@ public Menu_ReadyPanel(Handle:menu, MenuAction:action, param1, param2)
     
 }
 
+
+
+
+//thanks to Liam for helping me figure out from the disassembly what the server's director_stop does
 directorStop()
 {
     #if READY_DEBUG
     DebugPrintToAll("[DEBUG] Director stopped.");
-    #endif
-    
+    #endif      
     //doing director_stop on the server sets the below variables like so
     SetConVarInt(FindConVar("director_no_bosses"), 1);
-    SetConVarInt(FindConVar("director_no_specials"), 1);
+    if(GetConVarBool(cvarReadyUpStyle))
+    {
+        SetConVarInt(FindConVar("director_no_specials"), 0);
+        SetConVarInt(FindConVar("versus_force_start_time"), 86400); //24hours : D
+    }
+    else
+    {
+        SetConVarInt(FindConVar("director_no_specials"), 1);
+        SetConVarInt(FindConVar("versus_force_start_time"), 90);    //default
+    }
     SetConVarInt(FindConVar("director_no_mobs"), 1);
     SetConVarInt(FindConVar("director_ready_duration"), 0);
     SetConVarInt(FindConVar("z_common_limit"), 0);
     SetConVarInt(FindConVar("z_mega_mob_size"), 1); //why not 0? only Valve knows
+    //SetConVarInt(FindConVar("z_health"), 0);                                          //doest spawn zombies but doesnt stop director
     
     //empty teams of survivors dont cycle the round
     SetConVarInt(FindConVar("sb_all_bot_team"), 1);
+    
+    //dont accidentally spawn tanks in ready mode
+    ResetConVar(FindConVar("director_force_tank"));
 }
 
 directorStart()
@@ -1617,95 +2189,57 @@ directorStart()
     #if READY_DEBUG
     DebugPrintToAll("[DEBUG] Director started.");
     #endif
-    
+    //getting values from the convars
+    new ready_z_common_limit = GetConVarInt(cvarReadyCommonLimit);
+    new ready_z_mega_mob_size = GetConVarInt(cvarReadyMegaMobSize);
+    new ready_sb_all_bot_team = GetConVarInt(cvarReadyAllBotTeam);
     ResetConVar(FindConVar("director_no_bosses"));
     ResetConVar(FindConVar("director_no_specials"));
     ResetConVar(FindConVar("director_no_mobs"));
     ResetConVar(FindConVar("director_ready_duration"));
-    ResetConVar(FindConVar("z_common_limit"));
-    ResetConVar(FindConVar("z_mega_mob_size"));
+    //support for ?v? cfgs - only reset these cvars if the round isn't being restarted, or there isn't a ?v? cfg
+    //if(!GetConVarBool(cvarReadyRestartRound) || !GetConVarBool(cvarReadyServerCfg))
+    SetConVarInt(FindConVar("z_common_limit"), ready_z_common_limit);
+    SetConVarInt(FindConVar("z_mega_mob_size"), ready_z_mega_mob_size);
+    SetConVarInt(FindConVar("sb_all_bot_team"), ready_sb_all_bot_team);     
 }
 
 //freeze everyone until they ready up
 readyOn()
 {
-    
     DebugPrintToAll("readyOn() called");
     
-#if READY_SCAVENGE_WARMUP
-    if(IsScavengeMode() && !isSecondRound)
-    {
-        //DebugPrintToAll("Warm 
-        inWarmUp = true;
-    }
-    else
-    {
-        inWarmUp = false;
-    }
-#else
-    inWarmUp = false;
-#endif
     readyMode = true;
     
     PrintHintTextToAll("Ready mode on.\nSay !ready to ready up or !unready to unready.");
-    
-    if (!inWarmUp)
+    /*if(!hookedSpawnReady) 
     {
-        if(!hookedPlayerHurt) 
-        {
-            HookEvent("player_hurt", eventPlayerHurt);
-            hookedPlayerHurt = 1;
-        }
-        if(IsScavengeMode())
-        {
-            //reset the scavenge setup timer every 0.5 seconds
-            CreateTimer(READY_RESTART_SCAVENGE_TIMER, Timer_ResetScavengeSetup, _, TIMER_REPEAT);
-        }
-        else //versus
-        {
-            directorStop();
-        }
-        
-        decl i;
-        for (i = 1; i < L4D_MAXCLIENTS_PLUS1; i++)
-        {
-            readyStatus[i] = 0;
-            if (IsValidEntity(i) && IsClientInGame(i) && (GetClientTeam(i) == L4D_TEAM_SURVIVORS)) 
-            {
-                
-                #if READY_DEBUG
-                new String:curname[128];
-                GetClientName(i,curname,128);
-                DebugPrintToAll("[DEBUG] Freezing %s [%d] during readyOn().", curname, i);
-                #endif
-                
-                ToggleFreezePlayer(i, true);
-            }
-        }
+    HookEvent("player_spawn", eventSpawnReadyCallback);
+    hookedSpawnReady = 1;
+    }*/
+    if(!hookedPlayerHurt) 
+    {
+        HookEvent("player_hurt", eventPlayerHurt);
+        hookedPlayerHurt = 1;
     }
-    else // warm up on
+    
+    directorStop();
+    
+    decl i;
+    for(i = 1; i <= MaxClients; i++)
     {
-        if (bReadyOffCalled)
+        readyStatus[i] = 0;
+        if(IsValidEntity(i) && IsClientInGame(i) && (GetClientTeam(i) == L4D_TEAM_SURVIVORS)) 
         {
-            iInitialSetupTime = GetConVarInt(cvarScavengeSetup);
-            iInitialAllTalk = GetConVarInt(FindConVar("sv_alltalk"));
-            iInitialGhostTimeMin = GetConVarInt(FindConVar("z_ghost_delay_min"));
-            iInitialGhostTimeMax = GetConVarInt(FindConVar("z_ghost_delay_max"));
+            
+            #if READY_DEBUG
+            new String:curname[128];
+            GetClientName(i,curname,128);
+            DebugPrintToAll("[DEBUG] Freezing %s [%d] during readyOn().", curname, i);
+            #endif
+            
+            ToggleFreezePlayer(i, true);
         }
-        bReadyOffCalled = false;
-        DebugPrintToAll("Warmup on");
-        iInitialSetupTime = GetConVarInt(cvarScavengeSetup);
-        SetConVarInt(cvarScavengeSetup, 0);
-        SetConVarFlags(cvarGod,GetConVarFlags(cvarGod) & ~FCVAR_NOTIFY);
-        SetConVarInt(cvarGod, 1);
-        SetConVarFlags(cvarGod,GetConVarFlags(cvarGod) | FCVAR_NOTIFY);
-        SetConVarInt(FindConVar("director_no_mobs"), 1);
-        SetConVarInt(FindConVar("director_ready_duration"), 0);
-        SetConVarInt(FindConVar("z_common_limit"), 0);
-        SetConVarInt(FindConVar("sv_alltalk"), 1);
-        SetConVarInt(FindConVar("z_ghost_delay_max"), 0);
-        SetConVarInt(FindConVar("z_ghost_delay_min"), 0);
-        L4D_SetRoundEndTime(L4D_SCAVENGE_GAMECLOCK_HALT);
     }
     
     if(!unreadyTimerExists)
@@ -1729,112 +2263,25 @@ readyOff()
         UnhookEvent("player_hurt", eventPlayerHurt);
         hookedPlayerHurt = 0;
     }
-    if (!inWarmUp)
+    
+    directorStart();
+    
+    if(insidePluginEnd)
     {
-        if(!IsScavengeMode())
-        {
-            directorStart();
-        }
-        
-        if(insidePluginEnd)
-        {
-            UnfreezeAllPlayers();
-        }
-    }
-    else //warm up off
-    {
-        bReadyOffCalled = true;
-        DebugPrintToAll("Warmup off");
-        SetConVarInt(cvarScavengeSetup, iInitialSetupTime);
-        SetConVarFlags(cvarGod,GetConVarFlags(cvarGod) & ~FCVAR_NOTIFY);
-        SetConVarInt(cvarGod, 0);
-        SetConVarFlags(cvarGod,GetConVarFlags(cvarGod) | FCVAR_NOTIFY);
-        ResetConVar(FindConVar("director_no_mobs"));
-        ResetConVar(FindConVar("director_ready_duration"));
-        ResetConVar(FindConVar("z_common_limit"));
-        SetConVarInt(FindConVar("sv_alltalk"), iInitialAllTalk);
-        SetConVarInt(FindConVar("z_ghost_delay_max"), iInitialGhostTimeMax);
-        SetConVarInt(FindConVar("z_ghost_delay_min"), iInitialGhostTimeMin);
-        L4D_ResetRoundNumber();
-        inWarmUp = false;
+        UnfreezeAllPlayers();
     }
     
     //used to unfreeze all players here always
     //now we will do it at the beginning of the round when its live
     //so that players cant open the safe room door during the restarts
 }
-stock L4D_ResetRoundNumber()
-{
-    static bool:init = false;
-    static Handle:func = INVALID_HANDLE;
-    
-    if(!init)
-    {
-        new Handle:conf = LoadGameConfigFile(GAMECONFIG_FILE);
-        if(conf == INVALID_HANDLE)
-        {
-            LogError("Could not load gamedata/%s.txt", GAMECONFIG_FILE);
-            DebugPrintToAll("Could not load gamedata/%s.txt", GAMECONFIG_FILE);
-        }
-        
-        StartPrepSDKCall(SDKCall_GameRules);
-        new bool:readConf = PrepSDKCall_SetFromConf(conf, SDKConf_Signature, "CTerrorGameRules_ResetRoundNumber");
-        if(!readConf)
-        {
-            ThrowError("Failed to read function from game configuration file");
-        }
-        func = EndPrepSDKCall();
-        
-        if(func == INVALID_HANDLE)
-        {
-            ThrowError("Failed to end prep sdk call");
-        }
-        
-        init = true;
-    }
 
-    SDKCall(func);
-    DebugPrintToAll("CTerrorGameRules::ResetRoundNumber()");
-}
-stock L4D_SetRoundEndTime(Float:endTime)
-{
-    static bool:init = false;
-    static Handle:func = INVALID_HANDLE;
-    if(!init)
-    {
-        new Handle:conf = LoadGameConfigFile(GAMECONFIG_FILE);
-        if(conf == INVALID_HANDLE)
-        {
-            LogError("Could not load gamedata/%s.txt", GAMECONFIG_FILE);
-            DebugPrintToAll("Could not load gamedata/%s.txt", GAMECONFIG_FILE);
-        }
-        
-        StartPrepSDKCall(SDKCall_GameRules);
-        new bool:readConf = PrepSDKCall_SetFromConf(conf, SDKConf_Signature, "CTerrorGameRules_SetRoundEndTime");
-        if(!readConf)
-        {
-            ThrowError("Failed to read function from game configuration file");
-        }
-        PrepSDKCall_AddParameter(SDKType_Float, SDKPass_Plain);
-        func = EndPrepSDKCall();
-        
-        if(func == INVALID_HANDLE)
-        {
-            ThrowError("Failed to end prep sdk call");
-        }
-        
-        init = true;
-    }
-
-    SDKCall(func, endTime);
-    DebugPrintToAll("CTerrorGameRules::SetRoundTime(%f)", endTime);
-}
 UnfreezeAllPlayers()
 {
     decl i;
-    for (i = 1; i < L4D_MAXCLIENTS_PLUS1; i++) 
+    for(i = 1; i <= MaxClients; i++) 
     {
-        if (IsClientInGame(i)) 
+        if(IsClientInGame(i) && (GetClientTeam(i) != L4D_TEAM_SPECTATE)) 
         {
             #if READY_DEBUG
             new String:curname[128];
@@ -1842,7 +2289,10 @@ UnfreezeAllPlayers()
             DebugPrintToAll("[DEBUG] Unfreezing %s [%d] during UnfreezeAllPlayers().", curname, i);
             #endif
             
-            ToggleFreezePlayer(i, false);
+            //if(GetClientTeam(i) != L4D_TEAM_SPECTATE)
+                ToggleFreezePlayer(i, false);
+            /*else
+                SetEntityMoveType(i, MOVETYPE_OBSERVER);*/
         }
     }
 }
@@ -1857,19 +2307,20 @@ compOn()
     forcedStart = 0;
     
     decl i;
-    for (i = 1; i <= MAXPLAYERS; i++) readyStatus[i] = 0;
+    for(i = 1; i <= MAXPLAYERS; i++) readyStatus[i] = 0;
 }
 
 //abort an impending countdown to a live match
 public Action:compAbort(client, args)
 {
-    if (!goingLive)
+    if(!goingLive)
     {
         ReplyToCommand(0, "L4DC: Nothing to abort.");
         return Plugin_Handled;
     }
     
-    if (goingLive)
+    //  if(readyMode) readyOff();
+    if(goingLive)
     {
         KillTimer(liveTimer);
         forcedStart = 0;
@@ -1884,15 +2335,9 @@ public Action:compAbort(client, args)
 //begin the ready mode (everyone now needs to ready up before they can move)
 public Action:compReady(client, args)
 {
-    if(!IsVersusMode() && !IsScavengeMode())
+    if(goingLive)
     {
-        DebugPrintToAll("Skipping compReady since we're not in versus or scavenge");
-        return Plugin_Handled;
-    }
-    
-    if (goingLive)
-    {
-        ReplyToCommand(0, "[L4D RUP] Already going live, ignoring.");
+        ReplyToCommand(0, "L4DC: Already going live, ignoring.");
         return Plugin_Handled;
     }
     
@@ -1908,13 +2353,15 @@ public Action:compStart(client, args)
     if(!readyMode)
         return Plugin_Handled;
     
-    if (goingLive)
+    if(goingLive)
     {
-        ReplyToCommand(0, "[L4D RUP] Already going live, ignoring.");
+        ReplyToCommand(0, "L4DC: Already going live, ignoring.");
         return Plugin_Handled;
     }
     
-    goingLive = READY_LIVE_COUNTDOWN;
+    //  compOn();
+    
+    goingLive = GetConVarInt(cvarReadyLiveCountdown);
     forcedStart = 1;
     liveTimer = CreateTimer(1.0, timerLiveCountCallback, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
     
@@ -1923,8 +2370,19 @@ public Action:compStart(client, args)
 
 //restart the map when we toggle the cvar
 public ConVarChange_ReadyEnabled(Handle:convar, const String:oldValue[], const String:newValue[])
-{    
-    if (oldValue[0] == newValue[0])
+{   
+    /*if(!IsSourcemodVersionValid())
+    {
+        PrintToChatAll("Your SourceMod version is out of date, please upgrade to 1.2.1 stable");
+        return;
+    }
+    if(!IsLeft4DowntownVersionValid())
+    {
+        PrintToChatAll("Your Left 4 Downtown Extension is out of date, please upgrade to 0.3.0 or later");
+        return;
+    }*/
+    
+    if(oldValue[0] == newValue[0])
     {
         return;
     }
@@ -1943,10 +2401,10 @@ public ConVarChange_ReadyEnabled(Handle:convar, const String:oldValue[], const S
                 
                 if(searchKey[0] == 0)
                 {
-                    LogMessage("Ready plugin will not start while sv_search_key is \"\"");
-                    PrintToChatAll("[SM] Ready plugin will not start while sv_search_key is \"\"");
+                    LogMessage("Ready plugin will ignore sv_search_key");
+                    //PrintToChatAll("[SM] Ready plugin will not start while sv_search_key is \"\"");
                     
-                    ServerCommand("l4d_ready_enabled 0");
+                    //ServerCommand("l4d_ready_enabled 0");
                     return;
                 }
             }
@@ -1966,7 +2424,7 @@ public ConVarChange_ReadyEnabled(Handle:convar, const String:oldValue[], const S
 //disable most non-competitive plugins
 public ConVarChange_ReadyCompetition(Handle:convar, const String:oldValue[], const String:newValue[])
 {
-    if (oldValue[0] == newValue[0])
+    if(oldValue[0] == newValue[0])
     {
         return;
     }
@@ -2013,12 +2471,12 @@ public ConVarChange_ReadyCompetition(Handle:convar, const String:oldValue[], con
 //disable the ready mod if sv_search_key is ""
 public ConVarChange_SearchKey(Handle:convar, const String:oldValue[], const String:newValue[])
 {
-    if (oldValue[0] == newValue[0])
+    if(oldValue[0] == newValue[0])
     {
         return;
     }
     else
-    {    
+    {   
         if(newValue[0] == 0)
         {
             //wait about 5 secs and then disable the ready up mod
@@ -2028,6 +2486,35 @@ public ConVarChange_SearchKey(Handle:convar, const String:oldValue[], const Stri
             CreateTimer(5.0, Timer_SearchKeyDisabled, _, TIMER_FLAG_NO_MAPCHANGE);
         }
     }
+}
+
+public ConVarChange_AllowReready(Handle:convar, const String:oldValue[], const String:newValue[])
+{
+    CheckAllowReready();
+}
+
+public ConVarChange_cvarSpectatePenalt(Handle:convar, const String:oldValue[], const String:newValue[])
+{
+    CheckSpectatePenalty();
+}
+
+static CheckAllowReready()
+{
+    if(GetConVarInt(cvarAllowReready) == 0) g_bAllowReready = false;
+    else g_bAllowReready = true;
+}
+
+static CheckSpectatePenalty()
+{
+    if(GetConVarInt(cvarSpectatePenalty) < -1) g_iSpectatePenalty = -1;
+    else g_iSpectatePenalty = GetConVarInt(cvarSpectatePenalty);
+    g_iSpectatePenalty--;
+    
+    new i;
+    for(i = 1; i <= MaxClients; i++)
+    {   
+        g_iSpectatePenaltyCounter[i] = g_iSpectatePenalty;
+    }   
 }
 
 //repeatedly count down until the match goes live
@@ -2042,9 +2529,9 @@ public Action:Timer_SearchKeyDisabled(Handle:timer)
         
         if(searchKey[0] == 0)
         {
-            PrintToChatAll("[SM] Sv_search_key is set to \"\", the ready plugin will now automatically disable.");
+            PrintToChatAll("[SM] Sv_search_key is set to \"\", the ready plugin will now do absolutely nothing.");
             
-            ServerCommand("l4d_ready_enabled 0");
+            //ServerCommand("l4d_ready_enabled 0");
             return;
         }
     }
@@ -2101,7 +2588,7 @@ public Action:Command_DumpGameRules(client,args)
     
     new entValue = GetEntData(gamerules, offset, 4);
     new entValue2 = GetEntData(gamerules, offset+4, 4);
-    //    new distance = GetEntProp(gamerules, Prop_Send, "m_iSurvivorScore");
+    //  new distance = GetEntProp(gamerules, Prop_Send, "m_iSurvivorScore");
     
     DebugPrintToAll("Survivor score = %d, %d [offset = %d]", entValue, entValue2, offset);
     
@@ -2114,7 +2601,7 @@ public Action:Command_DumpGameRules(client,args)
     
     new centValue = GetEntData(gamerules, c_offset, 2);
     new centValue2 = GetEntData(gamerules, c_offset+4, 2);
-    //    new distance = GetEntProp(gamerules, Prop_Send, "m_iSurvivorScore");
+    //  new distance = GetEntProp(gamerules, Prop_Send, "m_iSurvivorScore");
     
     DebugPrintToAll("Campaign score = %d, %d [offset = %d]", centValue, centValue2, c_offset);
     
@@ -2238,371 +2725,152 @@ public Action:Command_ScanProperties(client, args)
     
 }
 
+public Action:Command_PlayerSwap(client, args)
+{
+    if(args < 2)
+    {
+        ReplyToCommand(client, "[SM] Usage: sm_swap <player1> <player2> - swap player1's and player2's teams");
+        return Plugin_Handled;
+    }
+    
+    new player1_id, player2_id;
+
+    new String:player1[64];
+    GetCmdArg(1, player1, sizeof(player1));
+
+    new String:player2[64];
+    GetCmdArg(2, player2, sizeof(player2));
+    
+    player1_id = FindTarget(client, player1, true /*nobots*/, false /*immunity*/);
+    player2_id = FindTarget(client, player2, true /*nobots*/, false /*immunity*/);
+    
+    if(player1_id == -1 || player2_id == -1)
+        return Plugin_Handled;
+    
+    SwapPlayers(player1_id, player2_id);
+    
+    PrintToChatAll("[SM] %N and %N have been swapped.", player1_id, player2_id);
+    
+    return Plugin_Handled;
+}
 
 public Action:Command_SwapTeams(client, args)
 {
-    PrintToChatAll("[SM] Survivor and Infected teams have been swapped.");
+    new infected[4];
+    new survivors[4];
     
+    new inf = 0, sur = 0;
     new i;
-    for(i = 1; i < L4D_MAXCLIENTS_PLUS1; i++)
-    {
-        if(IsClientInGameHuman(i) && GetClientTeam(i) != L4D_TEAM_SPECTATE)
-        {
-            teamPlacementArray[i] = GetOppositeClientTeam(i);
-        }
-    }
     
-    TryTeamPlacementDelayed();
-    
-    return Plugin_Handled;
-}
-
-
-public Action:Command_Swap(client, args)
-{
-    if (args < 1)
-    {
-        ReplyToCommand(client, "[SM] Usage: sm_swap <player1> [player2] ... [playerN] - swap all listed players to opposite teams");
-        return Plugin_Handled;
-    }
-    
-    new player_id;
-
-    new String:player[64];
-    
-    for(new i = 0; i < args; i++)
-    {
-        GetCmdArg(i+1, player, sizeof(player));
-        player_id = FindTarget(client, player, true /*nobots*/, false /*immunity*/);
-        
-        if(player_id == -1)
-            continue;
-        
-        new team = GetOppositeClientTeam(player_id);
-        teamPlacementArray[player_id] = team;
-        PrintToChatAll("[SM] %N has been swapped to the %s team.", player_id, L4D_TEAM_NAME(team));
-    }
-    
-    TryTeamPlacement();
-    
-    return Plugin_Handled;
-}
-
-
-public Action:Command_SwapTo(client, args)
-{
-    if (args < 2)
-    {
-        ReplyToCommand(client, "[SM] Usage: sm_swapto <player1> [player2] ... [playerN] <teamnum> - swap all listed players to team <teamnum> (1,2,or 3)");
-        return Plugin_Handled;
-    }
-    
-    new team;
-    new String:teamStr[64];
-    GetCmdArg(args, teamStr, sizeof(teamStr));
-    team = StringToInt(teamStr);
-    if(!team)
-    {
-        ReplyToCommand(client, "[SM] Invalid team %s specified, needs to be 1, 2, or 3", teamStr);
-        return Plugin_Handled;
-    }
-    
-    new player_id;
-
-    new String:player[64];
-    
-    for(new i = 0; i < args - 1; i++)
-    {
-        GetCmdArg(i+1, player, sizeof(player));
-        player_id = FindTarget(client, player, true /*nobots*/, false /*immunity*/);
-        
-        if(player_id == -1)
-            continue;
-        
-        teamPlacementArray[player_id] = team;
-        PrintToChatAll("[SM] %N has been swapped to the %s team.", player_id, L4D_TEAM_NAME(team));
-    }
-    
-    TryTeamPlacement();
-    
-    return Plugin_Handled;
-}
-
-
-public Action:Event_PlayerTeam(Handle:event, const String:name[], bool:dontBroadcast)
-{
-    TryTeamPlacementDelayed();
-}
-
-/*
-* Do a delayed "team placement"
-* 
-* This way all the pending team changes will go through instantly
-* and we don't end up in TryTeamPlacement again before then
-*/
-new bool:pendingTryTeamPlacement;
-TryTeamPlacementDelayed()
-{
-    if(!pendingTryTeamPlacement)
-    {
-        CreateTimer(SCORE_DELAY_PLACEMENT, Timer_TryTeamPlacement);    
-        pendingTryTeamPlacement = true;
-    }
-}
-
-public Action:Timer_TryTeamPlacement(Handle:timer)
-{
-    TryTeamPlacement();
-    pendingTryTeamPlacement = false;
-}
-
-/*
-* Try to place people on the right teams
-* after some kind of event happens that allows someone to be moved.
-* 
-* Should only be called indirectly by TryTeamPlacementDelayed()
-*/
-TryTeamPlacement()
-{
-    /*
-    * Calculate how many free slots a team has
-    */
-    new free_slots[4];
-    
-    free_slots[L4D_TEAM_SPECTATE] = GetTeamMaxHumans(L4D_TEAM_SPECTATE);
-    free_slots[L4D_TEAM_SURVIVORS] = GetTeamMaxHumans(L4D_TEAM_SURVIVORS);
-    free_slots[L4D_TEAM_INFECTED] = GetTeamMaxHumans(L4D_TEAM_INFECTED);    
-    
-    free_slots[L4D_TEAM_SURVIVORS] -= GetTeamHumanCount(L4D_TEAM_SURVIVORS);
-    free_slots[L4D_TEAM_INFECTED] -= GetTeamHumanCount(L4D_TEAM_INFECTED);
-    
-    DebugPrintToAll("TP: Trying to do team placement (free slots %d/%d)...", free_slots[L4D_TEAM_SURVIVORS], free_slots[L4D_TEAM_INFECTED]);
-        
-    /*
-    * Try to place people on the teams they should be on.
-    */
-    new i;
-    for(i = 1; i < L4D_MAXCLIENTS_PLUS1; i++) 
+    for(i = 1; i <= MaxClients; i++)
     {
         if(IsClientInGameHuman(i)) 
         {
-            new team = teamPlacementArray[i];
-            
-            //client does not need to be placed? then skip
-            if(!team)
+            new team = GetClientTeam(i);
+            if(team == L4D_TEAM_SURVIVORS)
             {
-                continue;
+                survivors[sur] = i;
+                sur++;
             }
-            
-            new old_team = GetClientTeam(i);
-            
-            //client is already on the right team
-            if(team == old_team)
+            else if(team == L4D_TEAM_INFECTED)
             {
-                teamPlacementArray[i] = 0;
-                teamPlacementAttempts[i] = 0;
-                
-                DebugPrintToAll("TP: %N is already on correct team (%d)", i, team);
+                infected[inf] = i;
+                inf++;
             }
-            //there's still room to place him on the right team
-            else if (free_slots[team] > 0)
-            {
-                ChangePlayerTeamDelayed(i, team);
-                DebugPrintToAll("TP: Moving %N to %d soon", i, team);
-                
-                free_slots[team]--;
-                free_slots[old_team]++;
-            }
-            /*
-            * no room to place him on the right team,
-            * so lets just move this person to spectate
-            * in anticipation of being to move him later
-            */
-            else
-            {
-                DebugPrintToAll("TP: %d attempts to move %N to team %d", teamPlacementAttempts[i], i, team);
-                
-                /*
-                * don't keep playing in an infinite join spectator loop,
-                * let him join another team if moving him fails
-                */
-                if(teamPlacementAttempts[i] > 0)
-                {
-                    DebugPrintToAll("TP: Cannot move %N onto %d, team full", i, team);
-                    
-                    //client joined a team after he was moved to spec temporarily
-                    if(GetClientTeam(i) != L4D_TEAM_SPECTATE)
-                    {
-                        DebugPrintToAll("TP: %N has willfully moved onto %d, cancelling placement", i, GetClientTeam(i));
-                        teamPlacementArray[i] = 0;
-                        teamPlacementAttempts[i] = 0;
-                    }
-                }
-                /*
-                * place him to spectator so room on the previous team is available
-                */
-                else
-                {
-                    free_slots[L4D_TEAM_SPECTATE]--;
-                    free_slots[old_team]++;
-                    
-                    DebugPrintToAll("TP: Moved %N to spectator, as %d has no room", i, team);
-                    
-                    ChangePlayerTeamDelayed(i, L4D_TEAM_SPECTATE);
-                    
-                    teamPlacementAttempts[i]++;
-                }
-            }
-        }
-        //the player is a bot, or disconnected, etc.
-        else 
-        {
-            if(!IsClientConnected(i) || IsFakeClient(i)) 
-            {
-                if(teamPlacementArray[i])
-                    DebugPrintToAll("TP: Defaultly removing %d from placement consideration", i);
-                
-                teamPlacementArray[i] = 0;
-                teamPlacementAttempts[i] = 0;
-            }            
         }
     }
     
-    /* If somehow all 8 players are connected and on opposite teams
-    *  then unfortunately this function will not work.
-    *  but of course this should not be called in that case,
-    *  instead swapteams can be used
-    */
-}
-
-/*
-* Return the opposite team of that the client is on
-*/
-stock GetOppositeClientTeam(client)
-{
-    return OppositeCurrentTeam(GetClientTeam(client));    
-}
-
-stock OppositeCurrentTeam(team)
-{
-    if(team == L4D_TEAM_INFECTED)
-        return L4D_TEAM_SURVIVORS;
-    else if(team == L4D_TEAM_SURVIVORS)
-        return L4D_TEAM_INFECTED;
-    else if(team == L4D_TEAM_SPECTATE)
-        return L4D_TEAM_SPECTATE;
+    new min = inf > sur ? sur : inf;
     
+    //first swap everyone that we can (equal # on both sides)
+    for(i = 0; i < min; i++)
+    {
+        SwapPlayers(infected[i], survivors[i]);
+    }
+    
+    //then move the remainder of the team to the other team
+    if(inf > sur)
+    {
+        for(i = min; i < inf; i++)
+        {
+            ChangePlayerTeam(infected[i], L4D_TEAM_SURVIVORS);
+        }
+    }
+    else 
+    {
+        for(i = min; i < sur; i++)
+        {
+            ChangePlayerTeam(survivors[i], L4D_TEAM_INFECTED);
+        }
+    }
+    
+    PrintToChatAll("[SM] Infected and Survivors have been swapped.");
+    
+    return Plugin_Handled;
+}
+
+//swap the two given players' teams
+SwapPlayers(i, j)
+{
+    if(GetClientTeam(i) == GetClientTeam(j))
+        return;
+    
+    new inf, surv;
+    if(GetClientTeam(i) == L4D_TEAM_INFECTED)
+    {
+        inf = i;
+        surv = j;
+    }
     else
-        return -1;
+    {
+        inf = j;
+        surv = i;
+    }
+
+    ChangePlayerTeam(inf,  L4D_TEAM_SPECTATE); 
+    ChangePlayerTeam(surv, L4D_TEAM_INFECTED); 
+    ChangePlayerTeam(inf,  L4D_TEAM_SURVIVORS); 
 }
 
-stock ChangePlayerTeamDelayed(client, team)
+ChangePlayerTeam(client, team)
 {
-    new Handle:pack;
-    
-    CreateDataTimer(SCORE_DELAY_TEAM_SWITCH, Timer_ChangePlayerTeam, pack);    
-    
-    WritePackCell(pack, client);
-    WritePackCell(pack, team);
-}
-
-public Action:Timer_ChangePlayerTeam(Handle:timer, Handle:pack)
-{
-    ResetPack(pack);
-    
-    new client = ReadPackCell(pack);
-    new team = ReadPackCell(pack);
-    
-    ChangePlayerTeam(client, team);
-}
-
-
-stock bool:ChangePlayerTeam(client, team)
-{
-    if(GetClientTeam(client) == team) return true;
+    if(GetClientTeam(client) == team) return;
     
     if(team != L4D_TEAM_SURVIVORS)
     {
-        //we can always swap to infected or spectator, it has no actual limit
         ChangeClientTeam(client, team);
-        return true;
-    }
-    
-    if(GetTeamHumanCount(team) == GetTeamMaxHumans(team))
-    {
-        DebugPrintToAll("ChangePlayerTeam() : Cannot switch %N to team %d, as team is full");
-        return false;
+        return;
     }
     
     //for survivors its more tricky
-    new bot;
     
-    for(bot = 1; 
-        bot < L4D_MAXCLIENTS_PLUS1 && (!IsClientConnected(bot) || !IsFakeClient(bot) || (GetClientTeam(bot) != L4D_TEAM_SURVIVORS));
-        bot++) {}
+    new String:command[] = "sb_takecontrol";
+    new flags = GetCommandFlags(command);
+    SetCommandFlags(command, flags & ~FCVAR_CHEAT);
     
-    if(bot == L4D_MAXCLIENTS_PLUS1)
+    new String:botNames[][] = { "zoey", "louis", "bill", "francis" };
+    
+    new cTeam;
+    cTeam = GetClientTeam(client);
+    
+    new i = 0;
+    while(cTeam != L4D_TEAM_SURVIVORS && i < 4)
     {
-        DebugPrintToAll("Could not find a survivor bot, adding a bot ourselves");
-        
-        new String:command[] = "sb_add";
-        new flags = GetCommandFlags(command);
-        SetCommandFlags(command, flags & ~FCVAR_CHEAT);
-        
-        ServerCommand("sb_add");
-        
-        SetCommandFlags(command, flags);
-        
-        DebugPrintToAll("Added a survivor bot, trying again...");
-        return false;
+        FakeClientCommand(client, "sb_takecontrol %s", botNames[i]);
+        cTeam = GetClientTeam(client);
+        i++;
     }
 
-    //have to do this to give control of a survivor bot
-    SDKCall(fSHS, bot, client);
-    SDKCall(fTOB, client, true);
-    
-    return true;
+    SetCommandFlags(command, flags);
 }
 
-stock GetTeamHumanCount(team)
-{
-    new humans = 0;
-    
-    new i;
-    for(i = 1; i < L4D_MAXCLIENTS_PLUS1; i++)
-    {
-        if(IsClientInGameHuman(i) && GetClientTeam(i) == team)
-        {
-            humans++;
-        }
-    }
-    
-    return humans;
-}
 
-stock GetTeamMaxHumans(team)
-{
-    if(team == L4D_TEAM_SURVIVORS)
-    {
-        return GetConVarInt(FindConVar("survivor_limit"));
-    }
-    else if(team == L4D_TEAM_INFECTED)
-    {
-        return GetConVarInt(FindConVar("z_max_player_zombies"));
-    }
-    else if(team == L4D_TEAM_SPECTATE)
-    {
-        return L4D_MAXCLIENTS;
-    }
-    
-    return -1;
-}
 
 //when the match goes live, at round_end of the last automatic restart
 //just before the round_start
 RoundEndBeforeLive()
 {
-    readyOff();    
+    readyOff(); 
 }
 
 //round_start just after the last automatic restart
@@ -2618,16 +2886,21 @@ ToggleFreezePlayer(client, freeze)
     SetEntityMoveType(client, freeze ? MOVETYPE_NONE : MOVETYPE_WALK);
 }
 
-//client is in-game and not a bot
-bool:IsClientInGameHuman(client)
+//client is connected
+bool:IsClientInGameHumanSpec(client)
 {
     return IsClientInGame(client) && !IsFakeClient(client);
+}
+//client is in-game and not a bot and not spec
+bool:IsClientInGameHuman(client)
+{
+    return IsClientInGame(client) && !IsFakeClient(client) && ((GetClientTeam(client) == L4D_TEAM_SURVIVORS || GetClientTeam(client) == L4D_TEAM_INFECTED) || GetConVarBool(cvarReadySpectatorRUP));
 }
 
 CountInGameHumans()
 {
     new i, realPlayers = 0;
-    for(i = 1; i < L4D_MAXCLIENTS_PLUS1; i++)
+    for(i = 1; i <= MaxClients; i++)
     {
         if(IsClientInGameHuman(i)) 
         {
@@ -2640,9 +2913,9 @@ CountInGameHumans()
 public GetAnyClient()
 {
     new i;
-    for(i = 1; i < L4D_MAXCLIENTS_PLUS1; i++)
+    for(i = 1; i <= MaxClients; i++)
     {
-        if (IsClientConnected(i) && IsClientInGameHuman(i))
+        if(IsClientConnected(i) && IsClientInGameHuman(i))
         {
             return i;
         }
@@ -2653,7 +2926,7 @@ public GetAnyClient()
 
 DebugPrintToAll(const String:format[], any:...)
 {
-#if READY_DEBUG    || READY_DEBUG_LOG
+#if READY_DEBUG || READY_DEBUG_LOG
     decl String:buffer[192];
     
     VFormat(buffer, sizeof(buffer), format, 2);
@@ -2671,6 +2944,15 @@ DebugPrintToAll(const String:format[], any:...)
 #endif
 }
 
+
+#if HEALTH_BONUS_FIX
+public Action:Command_UpdateHealth(client, args)
+{
+    DelayedUpdateHealthBonus();
+    
+    return Plugin_Handled;
+}
+
 CheckDependencyVersions(bool:throw=false)
 {
 #if !READY_DEBUG
@@ -2679,18 +2961,10 @@ CheckDependencyVersions(bool:throw=false)
         decl String:version[64];
         GetConVarString(FindConVar("sourcemod_version"), version, sizeof(version));
         
-//Fix warnings about evaluating constant expressions
-#if READY_VERSION_REQUIRED_SOURCEMOD_NONDEV
-#define ADD_STABLE_STRING " stable"
-#else
-#define ADD_STABLE_STRING ""
-#endif        
-        PrintToChatAll("[L4D RUP] Your SourceMod version (%s) is out of date, please upgrade to %s%s", version, READY_VERSION_REQUIRED_SOURCEMOD, ADD_STABLE_STRING);
+        PrintToChatAll("[L4D RUP] Your SourceMod version (%s) is out of date, please upgrade.", version);
         
         if(throw)
-            ThrowError("Your SourceMod version (%s) is out of date, please upgrade to %s%s", version, READY_VERSION_REQUIRED_SOURCEMOD, ADD_STABLE_STRING);
-    
-#undef ADD_STABLE_STRING
+            ThrowError("Your SourceMod version (%s) is out of date, please upgrade.", version);
     }
     if(!IsLeft4DowntownVersionValid())
     {
@@ -2698,7 +2972,7 @@ CheckDependencyVersions(bool:throw=false)
         new Handle:versionCvar = FindConVar("left4downtown_version");
         if(versionCvar == INVALID_HANDLE)
         {
-            strcopy(version, sizeof(version), "0.1.0"); //0.1.0 didn't have a version cvar
+            strcopy(version, sizeof(version), "0.1.0");
         }
         else
         {
@@ -2791,73 +3065,8 @@ ParseVersionNumber(const String:versionText[])
     return version;
 }
 
-bool:IsTargetL4D2()
-{
-    decl String:gameFolder[32];
-    GetGameFolderName(gameFolder, sizeof(gameFolder));
-    if (StrContains(gameFolder, "left4dead2") > -1)
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }    
-}
-
-bool:IsTargetL4D1()
-{
-    decl String:gameFolder[32];
-    GetGameFolderName(gameFolder, sizeof(gameFolder));
-    if (StrContains(gameFolder, "left4dead2") == -1 && StrContains(gameFolder, "left4dead") > -1)
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }        
-}
-
-
-bool:IsScavengeMode()
-{
-    decl String:sGameMode[32];
-    GetConVarString(cvarGameMode, sGameMode, sizeof(sGameMode));
-    if (StrContains(sGameMode, "scavenge") > -1)
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }    
-}
-
-bool:IsVersusMode()
-{
-    decl String:sGameMode[32];
-    GetConVarString(cvarGameMode, sGameMode, sizeof(sGameMode));
-    if (StrContains(sGameMode, "versus") > -1)
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }    
-}
-
-#if HEALTH_BONUS_FIX
-public Action:Command_UpdateHealth(client, args)
-{
-    DelayedUpdateHealthBonus();
-    
-    return Plugin_Handled;
-}
-
 public Action:Event_ItemPickup(Handle:event, const String:name[], bool:dontBroadcast)
-{    
+{   
     new player = GetClientOfUserId(GetEventInt(event, "userid"));
     
     new String:item[128];
@@ -2867,7 +3076,7 @@ public Action:Event_ItemPickup(Handle:event, const String:name[], bool:dontBroad
     new String:curname[128];
     GetClientName(player,curname,128);
     
-    if(strcmp(item, "pain_pills") == 0)        
+    if(strcmp(item, "pain_pills") == 0)     
         DebugPrintToAll("EVENT - Item %s picked up by %s [%d]", item, curname, player);
     #endif
     
@@ -2881,7 +3090,7 @@ public Action:Event_ItemPickup(Handle:event, const String:name[], bool:dontBroad
 }
 
 public Action:Event_PillsUsed(Handle:event, const String:name[], bool:dontBroadcast)
-{    
+{   
     new player = GetClientOfUserId(GetEventInt(event, "userid"));
     
     #if EBLOCK_DEBUG
@@ -2904,7 +3113,7 @@ public Action:Event_PillsUsed(Handle:event, const String:name[], bool:dontBroadc
 
 
 public Action:Event_HealSuccess(Handle:event, const String:name[], bool:dontBroadcast)
-{    
+{   
     #if EBLOCK_DEBUG
     new player = GetClientOfUserId(GetEventInt(event, "userid"));
     new subject = GetClientOfUserId(GetEventInt(event, "subject"));
@@ -2924,9 +3133,9 @@ public Action:Event_HealSuccess(Handle:event, const String:name[], bool:dontBroa
 }
 
 public Action:Event_RoundStart(Handle:event, const String:name[], bool:dontBroadcast)
-{    
+{   
     decl i;
-    for (i = 1; i < L4D_MAXCLIENTS_PLUS1; i++)
+    for(i = 1; i <= MaxClients; i++)
     {
         painPillHolders[i] = false;
     }
@@ -2954,9 +3163,9 @@ public Action:Timer_DoUpdateHealthBonus(Handle:timer)
 UpdateHealthBonus()
 {
     decl i;
-    for (i = 1; i < L4D_MAXCLIENTS_PLUS1; i++)
+    for(i = 1; i <= MaxClients; i++)
     {
-        if (IsClientInGame(i) && GetClientTeam(i) == 2) 
+        if(IsClientInGame(i) && GetClientTeam(i) == 2) 
         {
             UpdateHealthBonusForClient(i);
         }
@@ -2982,9 +3191,9 @@ public Action:Timer_PillUpdate(Handle:timer)
 UpdateHealthBonusForPillHolders()
 {
     decl i;
-    for (i = 1; i < L4D_MAXCLIENTS_PLUS1; i++)
+    for(i = 1; i <= MaxClients; i++)
     {
-        if (IsClientInGame(i) && GetClientTeam(i) == 2 && painPillHolders[i]) 
+        if(IsClientInGame(i) && GetClientTeam(i) == 2 && painPillHolders[i]) 
         {
             UpdateHealthBonusForClient(i);
         }
@@ -2997,7 +3206,7 @@ UpdateHealthBonusForClient(client)
 }
 
 SendHurtMe(i)
-{    /*
+{   /*
     * when a person uses pills the m_healthBuffer gets set to 
     * minimum(50, 100-currentHealth)
     * 
@@ -3023,184 +3232,3 @@ SendHurtMe(i)
     DebugPrintToAll("Sent hurtme to [%d]", i);
 }
 #endif
-public PersistentTeam:GetClientPersistentTeam(client)
-{
-    return GetL4D2TeamPersistentTeam(L4D2Team:GetClientTeam(client));
-}
-
-public PersistentTeam:GetL4D2TeamPersistentTeam(L4D2Team:team)
-{
-    if (team == L4D2Team_Unknown || team == L4D2Team_Spectators)
-    {
-        return PersistentTeam_Invalid;
-    }
-    if ((defaultTeams && !isSecondRound) || (!defaultTeams && isSecondRound))
-    {
-        if (team == L4D2Team_Survivors)
-        {
-            return PersistentTeam_A;
-        }
-        else
-        {
-            return PersistentTeam_B;
-        }
-    }
-    else
-    {
-        if (team == L4D2Team_Survivors)
-        {
-            return PersistentTeam_B;
-        }
-        else
-        {
-            return PersistentTeam_A;
-        }
-    }
-}
-
-TeamAttemptPause(client)
-{
-    static iPauses[PersistentTeam];
-    if (isNewMap)
-    {
-        iPauses[PersistentTeam_A] = 0;
-        iPauses[PersistentTeam_B] = 0;
-    }
-    if (iPauses[GetClientPersistentTeam(client)] >= GetConVarInt(cvarPausesAllowed))
-    {
-        ReplyToCommand(client, "[SM] Your team does not have any pauses remaining for this campaign.");
-        return false;
-    }
-    iPauses[GetClientPersistentTeam(client)]++;
-    PrintToChatAll("[SM] %N has paused the game! Their team has %d pauses remaining for this campaign.", client, GetConVarInt(cvarPausesAllowed) - iPauses[GetClientPersistentTeam(client)]);
-    PrintToChatAll("[SM] Players will be stuck at 99%% loading while the game is paused. Unpause it to let them through.");
-    PauseGame(client);
-    return true;
-}
-ClientAttemptsPause(client)
-{
-    new team = GetClientTeam(client);
-    if(!(team == L4D_TEAM_INFECTED || team == L4D_TEAM_SURVIVORS) || !GetConVarInt(cvarPausesAllowed) || readyMode || isPaused)
-    {
-        return;
-    }
-    if (TeamAttemptPause(client))
-    {
-        lastTeamPause = team;
-    }
-}
-ClientAttemptsUnpause(client)
-{
-    new team = GetClientTeam(client);
-    if(!(team == L4D_TEAM_INFECTED || team == L4D_TEAM_SURVIVORS) || !GetConVarInt(cvarPausesAllowed) || !isPaused || isUnpausing || readyMode)
-    {
-        return;
-    }
-    if (team == lastTeamPause || canUnpause)
-    {
-        PrintToChatAll("[SM] %N has unpaused the game! Game is going live in %d seconds...", client, L4D_UNPAUSE_DELAY);
-        UnpauseGameDelay(client);
-        return;
-    }
-    ReplyToCommand(client, "[SM]Your team can not unpause at this time.");
-}
-PauseGame(any:client)
-{
-    SetConVarInt(FindConVar("sv_pausable"), 1); //Ensure sv_pausable is set to 1
-    FakeClientCommand(client, "setpause"); //Send pause command
-    SetConVarInt(FindConVar("sv_pausable"), 0); //Reset sv_pausable back to 0
-    iInitialAllTalk = GetConVarInt(FindConVar("sv_alltalk"));
-    SetConVarInt(FindConVar("sv_alltalk"), 1);
-    isPaused = true;
-    canUnpause = false;
-    timerMinimumPause = CreateTimer(GetConVarFloat(cvarPauseDuration), AllCanUnpause, _, TIMER_FLAG_NO_MAPCHANGE);
-}
-
-UnpauseGame(any:client)
-{
-    isPaused = false;
-    SetConVarInt(FindConVar("sv_pausable"), 1); //Ensure sv_pausable is set to 1
-    FakeClientCommand(client, "unpause"); //Send unpause command
-    SetConVarInt(FindConVar("sv_pausable"), 0); //Reset sv_pausable back to 0
-    SetConVarInt(FindConVar("sv_alltalk"), iInitialAllTalk);
-    if (!canUnpause)
-    {
-        KillTimer(timerMinimumPause);
-        canUnpause = true;
-    }
-}
-
-public Action:UnPauseCountDown(Handle:timer, Handle:pack)
-{
-    ResetPack(pack);
-    static Countdown = L4D_UNPAUSE_DELAY-1;
-    //new timeslooped = RoundToCeil(GetGameTime())-ReadPackCell(pack);
-    if (Countdown <= 0)
-    {
-        PrintHintTextToAll("Game is LIVE");
-        isUnpausing = false;
-        Countdown = L4D_UNPAUSE_DELAY-1;
-        UnpauseGame(ReadPackCell(pack));
-        return Plugin_Stop;
-    }
-    PrintToChatAll("Game is going live in %d seconds...", Countdown);
-    if (Countdown >= L4D_UNPAUSE_DELAY-1 || !isUnpausing)
-        isUnpausing = true;
-    Countdown--;
-    return Plugin_Continue;
-}
-UnpauseGameDelay(client)
-{
-    isUnpausing = true;
-    new Handle:pack;
-    CreateDataTimer(1.0, UnPauseCountDown, pack, TIMER_REPEAT);
-    //WritePackCell(pack, RoundToCeil(GetGameTime()));
-    WritePackCell(pack, client);
-}
-public Action:AllCanUnpause(Handle:timer)
-{
-    if (isPaused)
-    {
-        canUnpause = true;
-        PrintToChatAll("[SM] The required minimum pause time has elapsed.  Either team can now unpause the game.");
-    }
-    return Plugin_Stop;
-}
-public Action:readyPause(client, args)
-{
-    //server can pause without a request
-    if(client == 0)
-    {
-        for(new i = 1; i < L4D_MAXCLIENTS_PLUS1; i++)
-        {
-            if(IsClientConnected(i) && IsClientInGame(i))
-            {
-                PauseGame(i);
-                return Plugin_Handled;
-            }
-        }
-    }
-    
-    ClientAttemptsPause(client);
-    
-    return Plugin_Handled;
-}
-public Action:readyUnpause(client, args)
-{
-    //server can unpause without a request
-    if(client == 0)
-    {
-        for(new i = 1; i < L4D_MAXCLIENTS_PLUS1; i++)
-        {
-            if(IsClientConnected(i) && IsClientInGame(i))
-            {
-                UnpauseGame(i);
-                return Plugin_Handled;
-            }
-        }
-    }
-    
-    ClientAttemptsUnpause(client);
-    
-    return Plugin_Handled;
-}

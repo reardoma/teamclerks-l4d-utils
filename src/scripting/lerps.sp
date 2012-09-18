@@ -1,14 +1,10 @@
-// Don't let the script be included more than once.
-#if defined _teamclerks_lerptracker
-  #endinput
-#endif
-#define _teamclerks_lerptracker
+#pragma semicolon 1
 
-/**
- * This lerptracker was originally written by ProdigySim, and as such I have left all his
- * plugin info as-is. However, I wanted to add the command that shows the lerps to a
- * player who requests it, so I forked his code.
- */
+#define PLUGIN_CMD_PREFIX "Lerps"
+
+#include <sourcemod>
+#include "teamclerks/helpers/colors.inc"
+
 
 //#define clamp(%0, %1, %2) ( ((%0) < (%1)) ? (%1) : ( ((%0) > (%2)) ? (%2) : (%0) ) )
 #define MAX(%0,%1) (((%0) > (%1)) ? (%0) : (%1))
@@ -16,7 +12,7 @@
 public Plugin:myinfo = 
 {
     name = "LerpTracker",
-    author = "ProdigySim",
+    author = "ProdigySim (archer edit)",
     description = "Keep track of players' lerp settings",
     version = "0.8",
     url = "https://bitbucket.org/ProdigySim/misc-sourcemod-plugins"
@@ -36,8 +32,8 @@ new Handle:hMinUpdateRate;
 new Handle:hMaxUpdateRate;
 new Handle:hMinInterpRatio;
 new Handle:hMaxInterpRatio;
-
-static const String: LERPS_CMD[]       = "lerps";
+//what even?
+new Handle:hPrintLerpStyle;
 
 // psychonic made me do it
 
@@ -46,6 +42,8 @@ static const String: LERPS_CMD[]       = "lerps";
 #define ShouldAnnounceLerpChanges() (GetConVarBool(hAnnounceLerp))
 
 #define ShouldAnnounceInitialLerp() (GetConVarInt(hAnnounceLerp) == 1)
+
+#define DefaultLerpStyle() (GetConVarBool(hPrintLerpStyle))
 
 #define ShouldLogLerpChanges() (GetConVarBool(hLogLerp))
 
@@ -58,27 +56,21 @@ static const String: LERPS_CMD[]       = "lerps";
 #define GetCurrentLerp(%0) (g_fCurrentLerps[(%0)])
 #define SetCurrentLerp(%0,%1) (g_fCurrentLerps[(%0)] = (%1))
 
-public _Lerps_OnPluginStart()
+public OnPluginStart()
 {
     hMinUpdateRate = FindConVar("sv_minupdaterate");
     hMaxUpdateRate = FindConVar("sv_maxupdaterate");
     hMinInterpRatio = FindConVar("sv_client_min_interp_ratio");
     hMaxInterpRatio= FindConVar("sv_client_max_interp_ratio");
     hLogLerp = CreateConVar("sm_log_lerp", "1", "Log changes to client lerp. 1=Log initial lerp and changes 2=Log changes only", FCVAR_PLUGIN);
-    hAnnounceLerp = CreateConVar("sm_announce_lerp", "1", "Announce changes to client lerp. 1=Announce initial lerp and changes 2=Announce changes only", FCVAR_PLUGIN);
+    hAnnounceLerp = CreateConVar("sm_announce_lerp", "0", "Announce changes to client lerp. 1=Announce initial lerp and changes 2=Announce changes only", FCVAR_PLUGIN);
     hFixLerpValue = CreateConVar("sm_fixlerp", "0", "Fix Lerp values clamping incorrectly when interp_ratio 0 is allowed", FCVAR_PLUGIN);
-    hMaxLerpValue = CreateConVar("sm_max_interp", "0.5", "Kick players whose settings breach this Hard upper-limit for player lerps.", FCVAR_PLUGIN);
+    hMaxLerpValue = CreateConVar("sm_max_interp", "0.101", "Kick players whose settings breach this Hard upper-limit for player lerps.", FCVAR_PLUGIN);
+    hPrintLerpStyle = CreateConVar("sm_lerpstyle", "0", "Display Style, 0 = default, 1 = team based", FCVAR_PLUGIN);
     
-    AddCommandListenerEx(Lerps_Cmd, LERPS_CMD);
-    
-    HookPublicEvent(EVENT_ONCLIENTDISCONNECT_POST, _Lerps_OnClientDisconnect_Post);
+    RegConsoleCmd("sm_lerps", Lerps_Cmd, "List the Lerps of all players in game", FCVAR_PLUGIN);
     
     ScanAllPlayersLerp();
-}
-
-public _Lerps_OnClientDisconnect_Post(client)
-{
-    InvalidateCurrentLerp(client);
 }
 
 /* Lerp calculation adapted from hl2sdk's CGameServerClients::OnClientSettingsChanged */
@@ -90,15 +82,70 @@ public OnClientSettingsChanged(client)
     }
 }
 
-public Action:Lerps_Cmd(client, const String:command[], args)
+public Action:Lerps_Say(client, const String:command[], args)
 {
-    new lerpcnt;
-    for(new rclient=1; rclient <= MaxClients; rclient++)
+  return Lerps_Cmd(client, args);
+}
+
+public Action:Lerps_Cmd(client, args)
+{
+    if(!DefaultLerpStyle())
     {
-        if(IsClientInGame(rclient) && !IsFakeClient(rclient))
+        new lerpcnt;
+        
+        for(new rclient=1; rclient <= MaxClients; rclient++)
         {
-            ReplyToCommand(client, "%02d. %N Lerp: %.01f", ++lerpcnt, rclient, (GetCurrentLerp(rclient)*1000));
+            if(IsClientInGame(rclient) && !IsFakeClient(rclient) && GetClientTeam(rclient) != 1)
+            {
+                ReplyToCommand(client, "%02d. %N Lerp: %.01f", ++lerpcnt, rclient, (GetCurrentLerp(rclient)*1000));
+            }
         }
+    }
+    else
+    {
+        new survivorCount = 0;
+        new infectedCount = 0;
+        //new bool:survivorPrinted = false;
+        //new bool:infectedPrinted
+        
+        
+        for(new rclient=1; rclient <= MaxClients; rclient++)
+        {
+            if(IsClientInGame(rclient) && !IsFakeClient(rclient))
+            {
+                if (GetClientTeam(rclient) == 2) survivorCount = 1;
+                if (GetClientTeam(rclient) == 3) infectedCount = 1;
+            }
+        }
+        
+        if (survivorCount == 1 || infectedCount == 1) CPrintToChat(client, "{blue}{default} \n \n \n \n");
+        
+        for(new rclient=1; rclient <= MaxClients; rclient++)
+        {
+            if(IsClientInGame(rclient) && !IsFakeClient(rclient) && GetClientTeam(rclient) == 2)
+            {
+                CPrintToChat(client, "{blue}%N {default}Lerp: {green}%.01f", rclient, (GetCurrentLerp(rclient)*1000));              
+            }           
+        }
+        //if (survivorCount == 1 && infectedCount == 1) CPrintToChat(client, "{blue}{default} ");
+        for(new rclient=1; rclient <= MaxClients; rclient++)
+        {
+            
+            /*if (survivorCount == 1 && infectedCount == 1 && !survivorPrinted)
+            {
+                survivorPrinted = true;
+                survivorCount++;
+                infectedCount++;
+                CPrintToChat(client, "{default}seperator");             
+            }*/
+            if(IsClientInGame(rclient) && !IsFakeClient(rclient) && GetClientTeam(rclient) == 3)
+            {
+                CPrintToChat(client, "{red}%N {default}Lerp: {green}%.01f", rclient, (GetCurrentLerp(rclient)*1000));
+                //CPrintToChat(client, "{blue}TEST {green}%i", survivorCount);
+            }
+        }
+        if (survivorCount == 1 || infectedCount == 1) CPrintToChat(client, "{blue}{green}______________________________");
+        //PrintToChat(client, "%i", survivorCount);
     }
     return Plugin_Handled;
 }
@@ -131,11 +178,8 @@ ProcessPlayerLerp(client)
         {
             if(ShouldAnnounceLerpChanges())
             {
+                if (GetClientTeam(client) != 1)
                 PrintToChatAll("%N's LerpTime Changed from %.01f to %.01f", client, GetCurrentLerp(client)*1000, m_fLerpTime*1000);
-            }
-            if(ShouldLogLerpChanges())
-            {
-                LogMessage("%N's LerpTime Changed from %.01f to %.01f", client, GetCurrentLerp(client)*1000, m_fLerpTime*1000);
             }
         }
     }
@@ -143,19 +187,19 @@ ProcessPlayerLerp(client)
     {
         if(ShouldAnnounceInitialLerp())
         {
+            if (GetClientTeam(client) != 1)
             PrintToChatAll("%N's LerpTime set to %.01f", client, m_fLerpTime*1000);
-        }
-        if(ShouldLogInitialLerp())
-        {
-            LogMessage("%N's LerpTime set to %.01f", client, m_fLerpTime*1000);
         }
     }
     
     new Float:max=GetConVarFloat(hMaxLerpValue);
     if(m_fLerpTime > max)
     {
-        KickClient(client, "Lerp %.01f exceeds server max of %.01f", m_fLerpTime*1000, max*1000);
-        PrintToChatAll("%N kicked for lerp too high. %.01f > %.01f", client, m_fLerpTime*1000, max*1000);
+        if (GetClientTeam(client) != 1)
+        {
+            KickClient(client, "Lerp %.01f exceeds server max of %.01f", m_fLerpTime*1000, max*1000);
+            PrintToChatAll("%N kicked for lerp too high. %.01f > %.01f", client, m_fLerpTime*1000, max*1000);
+        }
         if(ShouldLogLerpChanges())
         {
             LogMessage("Kicked %L for having lerp %.01f (max: %.01f)", client, m_fLerpTime*1000, max*1000);

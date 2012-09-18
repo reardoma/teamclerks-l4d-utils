@@ -1176,7 +1176,7 @@ public Action:Command_Say(client, args)
         return Plugin_Handled;
     }
     
-    idx = StrContains(sayWord, "unready", false);
+    idx = StrContains(sayWord, "u", false);
     if(idx == 1)
     {
         readyDown(client, args);

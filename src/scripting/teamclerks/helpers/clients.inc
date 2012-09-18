@@ -162,8 +162,6 @@ stock Get_Team_Max_Humans(team)
 {
     new survivorLimit = GetConVarInt(FindConVar("survivor_limit"));
     new infectedLimit = GetConVarInt(FindConVar("z_max_player_zombies"));
-    new spectatorLimit = GetConVarInt(FindConVar("maxplayers")) - 
-            (survivorLimit + infectedLimit);
     
     if(team == TEAM_SURVIVOR)
     {
@@ -174,5 +172,5 @@ stock Get_Team_Max_Humans(team)
         return infectedLimit;
     }
     
-    return spectatorLimit;
+    return -1;
 }

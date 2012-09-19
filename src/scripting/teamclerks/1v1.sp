@@ -56,7 +56,7 @@ public _1v1_OnPluginDisabled()
 }
 
 /**
- * No mobs cvar changed.
+ * 1v1 cvar changed.
  *
  * @param convar        Handle to the convar that was changed.
  * @param oldValue        String containing the value of the convar before it was changed.

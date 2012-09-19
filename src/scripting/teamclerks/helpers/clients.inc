@@ -96,6 +96,14 @@ stock Get_Survivor_Player_Count()
 }
 
 /**
+ * Determines if the given client is an infected.
+ */
+stock bool:Is_Client_Infected(client)
+{
+    return Is_Valid_Client(client) && GetClientTeam(client) == TEAM_INFECTED;
+}
+
+/**
  * Determines if the given client is 1) a valid player-client and 2) an infected.
  */
 stock bool:Is_Client_Player_Infected(client)

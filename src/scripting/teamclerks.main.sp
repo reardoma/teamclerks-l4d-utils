@@ -82,6 +82,7 @@
 #include "teamclerks/skeetpractice.sp"
 #include "teamclerks/1v1.sp"
 #include "teamclerks/teamselect.sp"
+#include "teamclerks/tankreport.sp"
 
 // --------------------
 //       Private
@@ -164,6 +165,7 @@ public OnPluginStartEx()
     _SkeetPractice_OnPluginStart();
     _1v1_OnPluginStart();
     _TeamSelect_OnPluginStart();
+    _TankReport_OnPluginStart();
     
     // Create cvar for control plugin state
     Format(buffer, sizeof(buffer), "Sets whether %s is enabled", PLUGIN_FULLNAME);

@@ -70,6 +70,9 @@ static  const   String: PIPEBOMB_NAME[]                 = "weapon_pipe_bomb_spaw
 static                  g_iDebugChannel                 = 0;
 static  const   String: DEBUG_CHANNEL_NAME[]            = "HealthControl";
 
+static          bool:   g_bHasMapStarted                = false;
+static          bool:   g_bHaveRunRoundStart            = false;
+
 #if PILLS_DEBUG
 static                  g_iDebugPillArrayIndex          = 0;
 #endif
@@ -138,6 +141,7 @@ public _HC_OnPluginEnable()
     HookEvent("round_start", _HC_RoundStart_Event, EventHookMode_PostNoCopy);
     HookEvent("player_left_start_area", _HC_PlayerLeftSafeRoom_Event, EventHookMode_PostNoCopy);
     HookEvent("round_end", _HC_RoundEnd_Event, EventHookMode_PostNoCopy);
+    HookPublicEvent(EVENT_ONMAPSTART, _HC_OnMapStart);
     HookPublicEvent(EVENT_ONMAPEND, _HC_OnMapEnd);
 
     UpdateHealthStyle();
@@ -165,6 +169,16 @@ public _HC_OnPluginDisable()
     DebugPrintToAllEx("Module is now unloaded");
 }
 
+public _HC_OnMapStart()
+{
+    g_bHasMapStarted = true;
+
+    if (!g_bHaveRunRoundStart)
+    {
+        _HC_RoundStart_Event(INVALID_HANDLE, "", false);
+    }
+}
+
 /**
  * Map is ending.
  *
@@ -172,6 +186,9 @@ public _HC_OnPluginDisable()
  */
 public _HC_OnMapEnd()
 {
+    g_bHaveRunRoundStart = false;
+    g_bHasMapStarted = false;
+
     UnhookPublicEvent(EVENT_ONENTITYCREATED, _HC_OnEntityCreated);
 
     DebugPrintToAllEx("Map is ending, unhook OnEntityCreated");
@@ -462,6 +479,12 @@ public _HC_PlayerLeftSafeRoom_Event(Handle:event, const String:name[], bool:dont
  */
 public _HC_RoundStart_Event(Handle:event, const String:name[], bool:dontBroadcast)
 {
+    if (!g_bHasMapStarted)
+    {
+        return; // Map have not started yet, do not replace anything until - fix for SourceMod 1.4
+    }
+    g_bHaveRunRoundStart = true;
+    
     if (g_iHealthStyle == REPLACE_NO_KITS)
     {
         DebugPrintToAllEx("Round start - Will not replace medkits");

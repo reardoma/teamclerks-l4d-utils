@@ -13,7 +13,7 @@
 #endif
 #define _teamclerks_cvarsilencer
 
-#define NUM_CVARS 57
+#define NUM_CVARS 58
 
 new String:cvars[NUM_CVARS][64] = {
     "vs_max_team_switches",            "sb_all_bot_team",                 "director_no_survivor_bots",         "survivor_limit",
@@ -30,7 +30,7 @@ new String:cvars[NUM_CVARS][64] = {
     "director_min_start_players",      "mp_logdetail",                    "fps_max",                           "sv_minupdaterate",
     "sv_maxupdaterate",                "sv_client_min_interp_ratio",      "rotoblin_enable",                   "rotoblin_health_style",
     "rotoblin_interp_min",             "rotoblin_interp_max",             "rotoblin_enable_throwables",        "rotoblin_enable_cannisters",
-    "sv_alltalk"
+    "sv_alltalk",                      "l4d_ready_enabled"
 };
 
 public _CvarSilencer_OnPluginStart()

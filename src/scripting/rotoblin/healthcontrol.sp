@@ -37,7 +37,8 @@ enum HEALTH_STYLE
     REPLACE_ALL_KITS = 1, // Replace all medkits with pills
     REPLACE_ALL_BUT_FINALE_KITS = 2, // Replace all medkits besides finale medkits
     SAFEROOM_AND_FINALE_PILLS_ONLY = 3, // Replace the saferoom and finale kits with pills and remove all other pills/kits
-    REMOVE_ALL_BUT_FOUR = 4 // Remove all pills except 4
+    REMOVE_ALL_BUT_FOUR = 4, // Remove all pills except 4
+    SAFEROOM_KITS_ONLY = 5 // Replace the finale kit with pills, remove all other pills/kits, give players a kit upon leaving the saferoom.
 }
 
 // --------------------
@@ -467,6 +468,10 @@ public _HC_PlayerLeftSafeRoom_Event(Handle:event, const String:name[], bool:dont
             GivePillsToSurvivors();
         }   
     }
+    else if(g_iHealthStyle == SAFEROOM_KITS_ONLY)
+    {
+        GiveKitsToSurvivors();
+    }
 }
 
 /**
@@ -523,8 +528,8 @@ public _HC_RoundEnd_Event(Handle:event, const String:name[], bool:dontBroadcast)
 public _HC_OnEntityCreated(entity, const String:classname[])
 {
     // If we're running the mode where all extra pills and kits are removed, we need to jump in first
-    if (g_iHealthStyle == SAFEROOM_AND_FINALE_PILLS_ONLY    && 
-        StrEqual(classname, PAIN_PILLS_CLASSNAME))
+    if ((g_iHealthStyle == SAFEROOM_AND_FINALE_PILLS_ONLY || g_iHealthStyle == SAFEROOM_KITS_ONLY)
+        && StrEqual(classname, PAIN_PILLS_CLASSNAME))
     {                       
         new entRef = EntIndexToEntRef(entity);
         CreateTimer(REPLACE_DELAY, _HC_RemoveItem_Delayed_Timer, entRef);
@@ -672,7 +677,7 @@ static UpdateStartingHealthItems()
     entity = -1;
     
     // Then, if we're using the hardcore setting, remove all pills from the map excluding the finale sets
-    if (g_iHealthStyle == SAFEROOM_AND_FINALE_PILLS_ONLY)
+    if (g_iHealthStyle == SAFEROOM_AND_FINALE_PILLS_ONLY || g_iHealthStyle == SAFEROOM_KITS_ONLY)
     {       
         if (g_bIsFinale)
         {
@@ -934,6 +939,31 @@ static GivePillsToSurvivors()
         if (IsClientConnected(i) && IsClientInGame(i) && GetClientTeam(i) == 2)
         {           
             FakeClientCommand(i, "give pain_pills");
+        }               
+    }
+    
+    SetCommandFlags(cmdGive, originalCmdFlags);
+}
+
+/**
+ * Dishes out kits to the survivors
+ * 
+ * @noreturn
+ */
+static GiveKitsToSurvivors()
+{
+    DebugPrintToAllEx("Giving kits to survivors.");
+    new String:cmdGive[] = "give";
+    new originalCmdFlags = GetCommandFlags(cmdGive);
+    
+    // Basically, make the command a non-cheat, execute it and then reset its flags.
+    SetCommandFlags(cmdGive, originalCmdFlags & ~FCVAR_CHEAT);
+    
+    for(new i = 1; i <= MaxClients; i++)
+    {
+        if(IsClientConnected(i) && IsClientInGame(i) && GetClientTeam(i) == 2)
+        {           
+            FakeClientCommand(i, "give first_aid_kit");
         }               
     }
     

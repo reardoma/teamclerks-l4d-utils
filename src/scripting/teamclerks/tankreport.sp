@@ -8,7 +8,8 @@
 #define ZOMBIECLASS_TANK 8
 #define TANK_REPORT_PANEL_LIFETIME 15
 
-static Handle:_TankReport_Cvar = INVALID_HANDLE;
+static Handle:_TankReport_Panel = INVALID_HANDLE;
+static Handle:_TankReport_Cvar  = INVALID_HANDLE;
 static bool:_TankReport_Enabled = false;
 
 // Attacker, Victim
@@ -22,17 +23,26 @@ public _TankReport_OnPluginStart()
 
     HookPublicEvent(EVENT_ONMAPSTART, _TankReport_OnMapStart);
     HookPublicEvent(EVENT_ONMAPEND, _TankReport_Report_To_Players);
-    
-    HookTankEvent(TANK_SPAWNED, _TankReport_Tank_Spawned);
-    HookTankEvent(TANK_KILLED, _TankReport_Tank_Killed);
 }
+
+/**
+ * Empty, as we don't care about what gets pressed in the HUD.
+ */
+public _TankReport_Panel_Event(Handle:menu, MenuAction:action, param1, param2) { }
 
 public _TankReport_OnMapStart()
 {
-    // Clear out the damage report in case there's a tank.
-    for (new i = 0; i < MAXPLAYERS+1; i++)
+    if (_TankReport_Enabled)
     {
-        damageReport[i] = 0;
+        // Clear out the damage report in case there's a tank.
+        for (new i = 0; i < MAXPLAYERS; i++)
+        {
+            damageReport[i] = 0;
+        }
+        
+        HookEvent("player_hurt", _TankReport_Player_Hurt_Event);
+        HookTankEvent(TANK_SPAWNED, _TankReport_Tank_Spawned);
+        HookTankEvent(TANK_KILLED, _TankReport_Report_To_Players);
     }
 }
 
@@ -40,20 +50,8 @@ public _TankReport_OnMapStart()
  * Handles setting up all the values for recording damage.
  */
 public _TankReport_Tank_Spawned(Handle:event, const String:name[], bool:dontBroadcast)
-{
-    HookEvent("player_hurt", _TankReport_Player_Hurt_Event);
-    
+{    
     tankReportRequired = true;
-}
-
-/**
- * Handles packaging the final report, then creates the timer to display to users. 
- */
-public _TankReport_Tank_Killed(Handle:event, const String:name[], bool:dontBroadcast)
-{
-    UnhookEvent("player_hurt", _TankReport_Player_Hurt_Event);
-    
-    _TankReport_Report_To_Players();
 }
 
 
@@ -86,52 +84,60 @@ public Action:_TankReport_Player_Hurt_Event(Handle:event, String:event_name[], b
     }
 }
 
-/**
- * This was needed as a callback; not sure why.
- */
-public _TankReport_Panel(Handle:menu, MenuAction:action, param1, param2) 
-{ 
-}
-
 
 /**
  * If enabled, send the report to the players.
  */
-public _TankReport_Report_To_Players()
+public _TankReport_Report_To_Players(Handle:event, const String:name[], bool:dontBroadcast)
 {
-    if (tankReportRequired && _TankReport_Enabled)
+    if (_TankReport_Enabled)
     {
-        // Report it!
-        new Handle:panel = CreatePanel();
-        
-        new const maxLen = 1024;
-        decl String:result[maxLen];
-        decl String:name[MAX_NAME_LENGTH];
-
-        DrawPanelText(panel,"Damage to tank");
-        
-        // Iterate over all survivors
-        for (new survivor = 1; survivor < MAXPLAYERS+1; survivor++)
+        if (tankReportRequired)
         {
-            // If not a survivor, ignore
-            if (!Is_Client_Survivor(survivor)) continue;
-
-            GetClientName(survivor, name, sizeof(name));
-            // "kain: 4214" per survivor drawn as text to the panel
-            Format(result, maxLen, "->%s: %i", name, damageReport[survivor]);
-            DrawPanelText(panel, result);
-        }
-
-        // Iterate over all clients
-        for (new client = 1; client < MAXPLAYERS+1; client++)
-        {
-            // If not a player, just ignore
-            if (!Is_Valid_Player_Client(client)) continue;
+            // Report it!
+            if (_TankReport_Panel != INVALID_HANDLE) CloseHandle(_TankReport_Panel);
+            _TankReport_Panel = CreatePanel();
             
-            SendPanelToClient(panel, client, _TankReport_Panel, TANK_REPORT_PANEL_LIFETIME);
-        }
-    }
+            decl String:sBuffer[512];
+            Format(sBuffer, sizeof(sBuffer), "Tank Damage Report", PLUGIN_TAG);
+            SetPanelTitle(_TankReport_Panel, sBuffer);
+            
+            new const maxLen = 1024;
+            decl String:result[maxLen];
+            decl String:nameTag[MAX_NAME_LENGTH + 2];
+            decl String:clientName[MAX_NAME_LENGTH];
+            
+            // Iterate over all survivors
+            for (new survivor = 1; survivor < MAXPLAYERS; survivor++)
+            {
+                // If not a survivor, ignore
+                if (!Is_Client_Survivor(survivor)) continue;
+                // TODO: maybe we can allow this to be infected as well... friendly-fire!
     
-    // Lastly...
-    tankReportRequired = false;
+                GetClientName(survivor, clientName, sizeof(clientName));
+                Format(nameTag, MAX_NAME_LENGTH + 2, "%s: ", clientName);
+                // Draw the name as "kain: " as an item to the panel
+                DrawPanelItem(_TankReport_Panel, nameTag);
+                Format(result, maxLen, "%i", damageReport[survivor]);
+                // Draw the damage dealt as "1321" as plain text to that item on the panel.
+                DrawPanelText(_TankReport_Panel, result);
+            }
+    
+            // Iterate over all clients
+            for (new client = 1; client < MAXPLAYERS; client++)
+            {
+                // If not a player, just ignore
+                if (!Is_Valid_Player_Client(client)) continue;
+                
+                SendPanelToClient(_TankReport_Panel, client, _TankReport_Panel_Event, TANK_REPORT_PANEL_LIFETIME);
+            }
+        }
+        
+        UnhookEvent("player_hurt", _TankReport_Player_Hurt_Event);
+        UnhookTankEvent(TANK_SPAWNED, _TankReport_Tank_Spawned);
+        UnhookTankEvent(TANK_KILLED, _TankReport_Report_To_Players);
+        
+        // Lastly...
+        tankReportRequired = false;
+    }
 }

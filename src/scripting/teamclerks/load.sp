@@ -252,7 +252,7 @@ _Load_Vote_On_Module(client, String:target[])
         }
         else
         {
-            PrintToChat(client, "You started a vote within the last %i seconds; please wait to start a new one.", 60);
+            PrintToChat(client, "You started a vote within the last %i seconds; please wait to start a new one.", 20);
         }
     }
     else
@@ -300,7 +300,7 @@ _Load_Start_Vote(client, String:target[])
     CreateTimer(20.0, _Load_Tally_Votes);
 
     new Handle:clientPack;
-    recentVoters[client] = CreateDataTimer(60.0, _Load_Allow_Start_Vote, clientPack);
+    recentVoters[client] = CreateDataTimer(20.0, _Load_Allow_Start_Vote, clientPack);
     WritePackCell(clientPack, client);
     
     decl String:nick[64];

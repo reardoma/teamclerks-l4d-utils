@@ -30,6 +30,7 @@
 stock bool:Is_Valid_Player_Client(client)
 {
     if (client == 0 || 
+        client > MaxClients ||
         !IsClientConnected(client) || 
         IsFakeClient(client) || 
         !IsClientInGame(client))
@@ -54,6 +55,7 @@ stock bool:Is_Valid_Bot_Client(client)
 stock bool:Is_Valid_Client(client)
 {
     if (client == 0 || 
+        client > MaxClients ||
         !IsClientConnected(client) || 
         !IsClientInGame(client))
     {

@@ -15,14 +15,18 @@ static bool:_TankReport_Enabled = false;
 // Attacker, Victim
 new damageReport[MAXPLAYERS+1];
 new bool:tankReportRequired = false;
+new tankTotalHp = 6000;
 
 public _TankReport_OnPluginStart()
 {
     _TankReport_Cvar = CreateConVar("tank_report_enabled", "0", "Controls whether tank info is displayed to players.", FCVAR_PLUGIN|FCVAR_SPONLY, true, 0.0, true, 1.0);
     HookConVarChange(_TankReport_Cvar, _TankReport_Cvar_Changed);
 
+    HookEvent("player_hurt", _TankReport_Player_Hurt_Event);
     HookPublicEvent(EVENT_ONMAPSTART, _TankReport_OnMapStart);
     HookPublicEvent(EVENT_ONMAPEND, _TankReport_Report_To_Players);
+    
+    TC_Debug("Tank Report Started");
 }
 
 /**
@@ -35,12 +39,16 @@ public _TankReport_OnMapStart()
     if (_TankReport_Enabled)
     {
         // Clear out the damage report in case there's a tank.
-        for (new i = 0; i < MAXPLAYERS; i++)
+        for (new i = 0; i < MaxClients; i++)
         {
             damageReport[i] = 0;
         }
-        
-        HookEvent("player_hurt", _TankReport_Player_Hurt_Event);
+        tankTotalHp = GetConVarInt(FindConVar("z_tank_health"));
+        // Avoid div-0, thank you.
+        if (tankTotalHp == 0)
+        {
+            tankTotalHp = 1;
+        }
         HookTankEvent(TANK_SPAWNED, _TankReport_Tank_Spawned);
         HookTankEvent(TANK_KILLED, _TankReport_Report_To_Players);
     }
@@ -76,12 +84,16 @@ public Action:_TankReport_Player_Hurt_Event(Handle:event, String:event_name[], b
     new attacker = GetClientOfUserId(GetEventInt(event, "attacker"));
     new victim   = GetClientOfUserId(GetEventInt(event, "userid"));
     new damage   = GetEventInt(event, "dmg_health");
+    decl String:clientName[MAX_NAME_LENGTH];
     
-    if (Is_Client_Infected(victim) &&
-        GetEntProp(victim, Prop_Send, "m_zombieClass") == ZOMBIECLASS_TANK)
+    if (GetTankClient() == victim && !IsTankDying())
     {
         damageReport[attacker] += damage;
+        GetClientName(attacker, clientName, sizeof(clientName));
+        TC_Debug("Tank took %i damage from %s", damage, clientName);
     }
+    
+    return Plugin_Continue;
 }
 
 
@@ -102,42 +114,94 @@ public _TankReport_Report_To_Players(Handle:event, const String:name[], bool:don
             Format(sBuffer, sizeof(sBuffer), "Tank Damage Report", PLUGIN_TAG);
             SetPanelTitle(_TankReport_Panel, sBuffer);
             
-            new const maxLen = 1024;
-            decl String:result[maxLen];
-            decl String:nameTag[MAX_NAME_LENGTH + 2];
-            decl String:clientName[MAX_NAME_LENGTH];
+            new survivorIndex = -1;
+            decl survivorClients[MaxClients];
+            decl damage, totalDamage;
             
             // Iterate over all survivors
-            for (new survivor = 1; survivor < MAXPLAYERS; survivor++)
+            for (new survivor = 1; survivor < MaxClients; survivor++)
             {
                 // If not a survivor, ignore
                 if (!Is_Client_Survivor(survivor)) continue;
                 // TODO: maybe we can allow this to be infected as well... friendly-fire!
-    
+                
+                survivorIndex ++;
+                survivorClients[survivorIndex] = survivor;
+                damage = damageReport[survivor];
+                totalDamage += damage;
+            }
+            SortCustom1D(survivorClients, 4, _TankReport_SortByDamageDesc);
+            // survivorClients is now sorted in order of who did most damage.
+
+            new healthDiff = tankTotalHp - totalDamage;
+            new const maxLen = 1024;
+            decl String:result[maxLen];
+            decl String:clientName[MAX_NAME_LENGTH];
+            decl survivor;
+            
+            for (new i; i <= survivorIndex; i++)
+            {
+                survivor = survivorClients[i];
+                damage = damageReport[survivor];
+                if (healthDiff > 0.0)
+                {
+                    // Pad the first survivor's damage with the leftover, if any.
+                    damage += healthDiff;
+                    healthDiff = 0;
+                }
                 GetClientName(survivor, clientName, sizeof(clientName));
-                Format(nameTag, MAX_NAME_LENGTH + 2, "%s: ", clientName);
-                // Draw the name as "kain: " as an item to the panel
-                DrawPanelItem(_TankReport_Panel, nameTag);
-                Format(result, maxLen, "%i", damageReport[survivor]);
-                // Draw the damage dealt as "1321" as plain text to that item on the panel.
+                Format(result, maxLen, "%N: %i (%d%%)", clientName, damageReport[survivor], _TankReport_GetDamageAsPercent(damage, totalDamage));
                 DrawPanelText(_TankReport_Panel, result);
             }
     
             // Iterate over all clients
-            for (new client = 1; client < MAXPLAYERS; client++)
+            for (new client = 1; client < MaxClients; client++)
             {
                 // If not a player, just ignore
                 if (!Is_Valid_Player_Client(client)) continue;
                 
                 SendPanelToClient(_TankReport_Panel, client, _TankReport_Panel_Event, TANK_REPORT_PANEL_LIFETIME);
             }
+            
+            UnhookEvent("player_hurt", _TankReport_Player_Hurt_Event);
         }
         
-        UnhookEvent("player_hurt", _TankReport_Player_Hurt_Event);
         UnhookTankEvent(TANK_SPAWNED, _TankReport_Tank_Spawned);
         UnhookTankEvent(TANK_KILLED, _TankReport_Report_To_Players);
         
         // Lastly...
         tankReportRequired = false;
     }
+}
+
+/**
+ * Helper method for finding the damage as a percent of the total damage.
+ */
+public Float:_TankReport_GetDamageAsPercent(damage, totalDamage)
+{
+    return FloatMul(FloatDiv(float(damage), float(totalDamage)), 100.0);
+}
+
+/**
+ * Helper method for sorting.
+ */
+public _TankReport_SortByDamageDesc(elem1, elem2, const array[], Handle:handle)
+{
+    if (damageReport[elem1] > damageReport[elem2])
+    {
+        return -1;
+    }
+    else if (damageReport[elem2] > damageReport[elem1])
+    {
+        return 1;
+    }
+    else if (elem1 > elem2)
+    {
+        return -1;
+    }
+    else if (elem2 > elem1)
+    {
+        return 1;
+    }
+    return 0;
 }

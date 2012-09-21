@@ -16,6 +16,7 @@ static bool:_TankReport_Enabled = false;
 new damageReport[MAXPLAYERS+1];
 new bool:tankReportRequired = false;
 new tankTotalHp = 6000;
+new survivorsStanding = 0;
 
 public _TankReport_OnPluginStart()
 {
@@ -23,8 +24,13 @@ public _TankReport_OnPluginStart()
     HookConVarChange(_TankReport_Cvar, _TankReport_Cvar_Changed);
 
     HookEvent("player_hurt", _TankReport_Player_Hurt_Event);
+    HookEvent("player_incapacitated", _TankReport_Player_Incapd_Event);
+    HookEvent("player_death", _TankReport_Player_Died_Event);
+    HookEvent("revive_success", _TankReport_Player_Revived);
+    HookEvent("survivor_rescued", _TankReport_Player_Rescued);
+    
     HookPublicEvent(EVENT_ONMAPSTART, _TankReport_OnMapStart);
-    HookPublicEvent(EVENT_ONMAPEND, _TankReport_Report_To_Players);
+    HookPublicEvent(EVENT_ONMAPEND, _TankReport_OnMapEnd);
     
     TC_Debug("Tank Report Started");
 }
@@ -34,6 +40,9 @@ public _TankReport_OnPluginStart()
  */
 public _TankReport_Panel_Event(Handle:menu, MenuAction:action, param1, param2) { }
 
+/**
+ * Hook up our tank events and reset our data just to be safe.
+ */
 public _TankReport_OnMapStart()
 {
     if (_TankReport_Enabled)
@@ -43,6 +52,7 @@ public _TankReport_OnMapStart()
         {
             damageReport[i] = 0;
         }
+        survivorsStanding = Get_Survivor_Count();
         tankTotalHp = GetConVarInt(FindConVar("z_tank_health"));
         // Avoid div-0, thank you.
         if (tankTotalHp == 0)
@@ -52,6 +62,17 @@ public _TankReport_OnMapStart()
         HookTankEvent(TANK_SPAWNED, _TankReport_Tank_Spawned);
         HookTankEvent(TANK_KILLED, _TankReport_Report_To_Players);
     }
+}
+
+/**
+ * Unhook our tank events.
+ */
+public _TankReport_OnMapEnd()
+{
+    _TankReport_Report_To_Players(INVALID_HANDLE, "", true);
+    
+    UnhookTankEvent(TANK_SPAWNED, _TankReport_Tank_Spawned);
+    UnhookTankEvent(TANK_KILLED, _TankReport_Report_To_Players);
 }
 
 /**
@@ -96,6 +117,83 @@ public Action:_TankReport_Player_Hurt_Event(Handle:event, String:event_name[], b
     return Plugin_Continue;
 }
 
+/**
+ * If the client that was incapacitated was a survivor, then we reduce the
+ * number of survivorsStanding; when that number hits zero, we display the
+ * tank report.
+ */
+public Action:_TankReport_Player_Incapd_Event(Handle:event, String:event_name[], bool:dontBroadcast)
+{
+    new victim = GetClientOfUserId(GetEventInt(event, "userid"));
+    
+    if (Is_Client_Survivor(victim))
+    {
+        survivorsStanding --;
+    }
+    
+    if (survivorsStanding == 0)
+    {
+        _TankReport_Report_To_Players(INVALID_HANDLE, "", true);
+    }
+    
+    return Plugin_Continue;
+}
+
+/**
+ * If the client that died was a survivor, then we reduce the number of
+ * survivorsStanding; when that number hits zero, we display the tank
+ * report.
+ */
+public Action:_TankReport_Player_Died_Event(Handle:event, String:event_name[], bool:dontBroadcast)
+{
+    new victim = GetClientOfUserId(GetEventInt(event, "userid"));
+    
+    if (Is_Client_Survivor(victim))
+    {
+        survivorsStanding --;
+    }
+    
+    if (survivorsStanding == 0)
+    {
+        _TankReport_Report_To_Players(INVALID_HANDLE, "", true);
+    }
+    
+    return Plugin_Continue;
+}
+
+/**
+ * It's truly unclear whether a survivor is "rescued" or "revived", but
+ * we will increment the number of survivorsStanding if a either happen
+ * to a survivor.
+ */
+public Action:_TankReport_Player_Revived(Handle:event, String:event_name[], bool:dontBroadcast)
+{
+    new client = GetClientOfUserId(GetEventInt(event, "subject"));
+    
+    if (Is_Client_Survivor(client))
+    {
+        survivorsStanding ++;
+    }
+    
+    return Plugin_Continue;
+}
+
+/**
+ * It's truly unclear whether a survivor is "rescued" or "revived", but
+ * we will increment the number of survivorsStanding if a either happen
+ * to a survivor.
+ */
+public Action:_TankReport_Player_Rescued(Handle:event, String:event_name[], bool:dontBroadcast)
+{
+    new client = GetClientOfUserId(GetEventInt(event, "victim"));
+    
+    if (Is_Client_Survivor(client))
+    {
+        survivorsStanding ++;
+    }
+    
+    return Plugin_Continue;
+}
 
 /**
  * If enabled, send the report to the players.
@@ -163,11 +261,13 @@ public _TankReport_Report_To_Players(Handle:event, const String:name[], bool:don
                 SendPanelToClient(_TankReport_Panel, client, _TankReport_Panel_Event, TANK_REPORT_PANEL_LIFETIME);
             }
             
-            UnhookEvent("player_hurt", _TankReport_Player_Hurt_Event);
+            // Clear out the damage report in case there's ANOTHER tank (finales)
+            for (new i = 0; i < MaxClients; i++)
+            {
+                damageReport[i] = 0;
+            }
+            survivorsStanding = Get_Survivor_Count();
         }
-        
-        UnhookTankEvent(TANK_SPAWNED, _TankReport_Tank_Spawned);
-        UnhookTankEvent(TANK_KILLED, _TankReport_Report_To_Players);
         
         // Lastly...
         tankReportRequired = false;

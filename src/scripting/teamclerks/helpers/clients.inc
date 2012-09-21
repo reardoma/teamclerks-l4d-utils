@@ -81,6 +81,23 @@ stock bool:Is_Client_Player_Survivor(client)
 }
 
 /**
+ * Returns the number of survivors in the game currently.
+ * This method DOES count bots.
+ */
+stock Get_Survivor_Count()
+{
+    new survivorPlayerCount = 0;
+    for (new client = 1; client <= MaxClients; client++)
+    {
+        if (Is_Client_Survivor(client))
+        {
+            survivorPlayerCount ++;
+        }
+    }
+    return survivorPlayerCount;
+}
+
+/**
  * Returns the number of player-controlled survivors in the game currently.
  * This method does NOT count bots, only humans playing survivors.
  */
@@ -114,6 +131,23 @@ stock bool:Is_Client_Player_Infected(client)
 }
 
 /**
+ * Returns the number of infected units in the game currently.
+ * This method DOES count bots.
+ */
+stock Get_Infected_Count()
+{
+    new infectedPlayerCount = 0;
+    for (new client = 1; client <= MaxClients; client++)
+    {
+        if (Is_Client_Player_Infected(client))
+        {
+            infectedPlayerCount ++;
+        }
+    }
+    return infectedPlayerCount;
+}
+
+/**
  * Returns the number of player-controlled infecteds in the game currently.
  * This method does NOT count bots, only humans playing survivors.
  */
@@ -136,6 +170,22 @@ stock Get_Infected_Player_Count()
 stock bool:Is_Client_Player_Spectator(client)
 {
     return Is_Valid_Player_Client(client) && GetClientTeam(client) == TEAM_SPECTATOR;
+}
+
+/**
+ * Returns the number of spectators in the current game.
+ */
+stock Get_Spectator_Count()
+{
+    new spectatorPlayerCount = 0;
+    for (new client = 1; client <= MaxClients; client++)
+    {
+        if (Is_Client_Spectator(client))
+        {
+            spectatorPlayerCount ++;
+        }
+    }
+    return spectatorPlayerCount;
 }
 
 /**

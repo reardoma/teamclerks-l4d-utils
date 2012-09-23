@@ -6,17 +6,19 @@
 #define _teamclerks_tank_report
 
 #define ZOMBIECLASS_TANK 8
-#define TANK_REPORT_PANEL_LIFETIME 15
+#define TANK_REPORT_PANEL_LIFETIME 25
+#define SURVIVOR_LIMIT 4
 
 static Handle:_TankReport_Panel = INVALID_HANDLE;
 static Handle:_TankReport_Cvar  = INVALID_HANDLE;
 static bool:_TankReport_Enabled = false;
+static bool:_TankReport_Tank_In_Play = false;
+static _TankReport_Tank_Total_HP = 6000;
+static _TankReport_Survivors_Standing = 0;
 
 // Attacker, Victim
 new damageReport[MAXPLAYERS+1];
 new bool:tankReportRequired = false;
-new tankTotalHp = 6000;
-new survivorsStanding = 0;
 
 public _TankReport_OnPluginStart()
 {
@@ -25,14 +27,13 @@ public _TankReport_OnPluginStart()
 
     HookEvent("player_hurt", _TankReport_Player_Hurt_Event);
     HookEvent("player_incapacitated", _TankReport_Player_Incapd_Event);
-    HookEvent("player_death", _TankReport_Player_Died_Event);
     HookEvent("revive_success", _TankReport_Player_Revived);
-    HookEvent("survivor_rescued", _TankReport_Player_Rescued);
     
     HookPublicEvent(EVENT_ONMAPSTART, _TankReport_OnMapStart);
     HookPublicEvent(EVENT_ONMAPEND, _TankReport_OnMapEnd);
     
-    TC_Debug("Tank Report Started");
+    HookEvent("round_start", _TankReport_OnRoundStart);
+    HookEvent("round_end", _TankReport_OnRoundEnd);
 }
 
 /**
@@ -52,15 +53,15 @@ public _TankReport_OnMapStart()
         {
             damageReport[i] = 0;
         }
-        survivorsStanding = Get_Survivor_Count();
-        tankTotalHp = GetConVarInt(FindConVar("z_tank_health"));
+        _TankReport_Tank_Total_HP = GetConVarInt(FindConVar("z_tank_health"));
+        _TankReport_Survivors_Standing = SURVIVOR_LIMIT;
         // Avoid div-0, thank you.
-        if (tankTotalHp == 0)
+        if (_TankReport_Tank_Total_HP == 0)
         {
-            tankTotalHp = 1;
+            _TankReport_Tank_Total_HP = 1;
         }
         HookTankEvent(TANK_SPAWNED, _TankReport_Tank_Spawned);
-        HookTankEvent(TANK_KILLED, _TankReport_Report_To_Players);
+        HookTankEvent(TANK_KILLED, _TankReport_Tank_Died);
     }
 }
 
@@ -69,7 +70,35 @@ public _TankReport_OnMapStart()
  */
 public _TankReport_OnMapEnd()
 {
-    _TankReport_Report_To_Players(INVALID_HANDLE, "", true);
+    _TankReport_Tank_In_Play = false;
+    
+    UnhookTankEvent(TANK_SPAWNED, _TankReport_Tank_Spawned);
+    UnhookTankEvent(TANK_KILLED, _TankReport_Report_To_Players);
+}
+
+public _TankReport_OnRoundStart(Handle:event, const String:name[], bool:dontBroadcast)
+{
+    if (_TankReport_Enabled)
+    {
+        // Clear out the damage report in case there's a tank.
+        for (new i = 0; i < MaxClients; i++)
+        {
+            damageReport[i] = 0;
+        }
+        _TankReport_Survivors_Standing = SURVIVOR_LIMIT;
+        // Avoid div-0, thank you.
+        if (_TankReport_Tank_Total_HP == 0)
+        {
+            _TankReport_Tank_Total_HP = 1;
+        }
+        HookTankEvent(TANK_SPAWNED, _TankReport_Tank_Spawned);
+        HookTankEvent(TANK_KILLED, _TankReport_Report_To_Players);
+    }
+}
+
+public _TankReport_OnRoundEnd(Handle:event, const String:name[], bool:dontBroadcast)
+{
+    _TankReport_Tank_In_Play = false;
     
     UnhookTankEvent(TANK_SPAWNED, _TankReport_Tank_Spawned);
     UnhookTankEvent(TANK_KILLED, _TankReport_Report_To_Players);
@@ -79,8 +108,23 @@ public _TankReport_OnMapEnd()
  * Handles setting up all the values for recording damage.
  */
 public _TankReport_Tank_Spawned(Handle:event, const String:name[], bool:dontBroadcast)
-{    
-    tankReportRequired = true;
+{
+    if (!_TankReport_Tank_In_Play)
+    {
+        _TankReport_Tank_In_Play = true;
+        tankReportRequired = true;
+        _TankReport_Tank_Total_HP = GetClientHealth(GetTankClient());
+    }
+    // Else this is a pass... we don't care
+}
+
+/**
+ * Handles reporting the values when the tank dies.
+ */
+public _TankReport_Tank_Died(Handle:event, const String:name[], bool:dontBroadcast)
+{
+    _TankReport_Tank_In_Play = false;
+    _TankReport_Report_To_Players(INVALID_HANDLE, "", true);
 }
 
 
@@ -102,16 +146,12 @@ public _TankReport_Cvar_Changed(Handle:convar, const String:oldValue[], const St
  */
 public Action:_TankReport_Player_Hurt_Event(Handle:event, String:event_name[], bool:dontBroadcast)
 {
-    new attacker = GetClientOfUserId(GetEventInt(event, "attacker"));
     new victim   = GetClientOfUserId(GetEventInt(event, "userid"));
-    new damage   = GetEventInt(event, "dmg_health");
-    decl String:clientName[MAX_NAME_LENGTH];
     
     if (GetTankClient() == victim && !IsTankDying())
     {
-        damageReport[attacker] += damage;
-        GetClientName(attacker, clientName, sizeof(clientName));
-        TC_Debug("Tank took %i damage from %s", damage, clientName);
+        new survivor = GetClientOfUserId(GetEventInt(event, "attacker"));
+        damageReport[survivor] += GetEventInt(event, "dmg_health");
     }
     
     return Plugin_Continue;
@@ -119,7 +159,7 @@ public Action:_TankReport_Player_Hurt_Event(Handle:event, String:event_name[], b
 
 /**
  * If the client that was incapacitated was a survivor, then we reduce the
- * number of survivorsStanding; when that number hits zero, we display the
+ * number of _TankReport_Survivors_Standing; when that number hits zero, we display the
  * tank report.
  */
 public Action:_TankReport_Player_Incapd_Event(Handle:event, String:event_name[], bool:dontBroadcast)
@@ -128,32 +168,11 @@ public Action:_TankReport_Player_Incapd_Event(Handle:event, String:event_name[],
     
     if (Is_Client_Survivor(victim))
     {
-        survivorsStanding --;
+        _TankReport_Survivors_Standing --;
+        TC_Debug("Survivor Incapd; Standing Count: %i", _TankReport_Survivors_Standing);
     }
     
-    if (survivorsStanding == 0)
-    {
-        _TankReport_Report_To_Players(INVALID_HANDLE, "", true);
-    }
-    
-    return Plugin_Continue;
-}
-
-/**
- * If the client that died was a survivor, then we reduce the number of
- * survivorsStanding; when that number hits zero, we display the tank
- * report.
- */
-public Action:_TankReport_Player_Died_Event(Handle:event, String:event_name[], bool:dontBroadcast)
-{
-    new victim = GetClientOfUserId(GetEventInt(event, "userid"));
-    
-    if (Is_Client_Survivor(victim))
-    {
-        survivorsStanding --;
-    }
-    
-    if (survivorsStanding == 0)
+    if (_TankReport_Survivors_Standing == 0)
     {
         _TankReport_Report_To_Players(INVALID_HANDLE, "", true);
     }
@@ -163,7 +182,7 @@ public Action:_TankReport_Player_Died_Event(Handle:event, String:event_name[], b
 
 /**
  * It's truly unclear whether a survivor is "rescued" or "revived", but
- * we will increment the number of survivorsStanding if a either happen
+ * we will increment the number of _TankReport_Survivors_Standing if a either happen
  * to a survivor.
  */
 public Action:_TankReport_Player_Revived(Handle:event, String:event_name[], bool:dontBroadcast)
@@ -172,24 +191,8 @@ public Action:_TankReport_Player_Revived(Handle:event, String:event_name[], bool
     
     if (Is_Client_Survivor(client))
     {
-        survivorsStanding ++;
-    }
-    
-    return Plugin_Continue;
-}
-
-/**
- * It's truly unclear whether a survivor is "rescued" or "revived", but
- * we will increment the number of survivorsStanding if a either happen
- * to a survivor.
- */
-public Action:_TankReport_Player_Rescued(Handle:event, String:event_name[], bool:dontBroadcast)
-{
-    new client = GetClientOfUserId(GetEventInt(event, "victim"));
-    
-    if (Is_Client_Survivor(client))
-    {
-        survivorsStanding ++;
+        _TankReport_Survivors_Standing ++;
+        TC_Debug("Survivor Revived; Standing Count: %i", _TankReport_Survivors_Standing);
     }
     
     return Plugin_Continue;
@@ -205,15 +208,17 @@ public _TankReport_Report_To_Players(Handle:event, const String:name[], bool:don
         if (tankReportRequired)
         {
             // Report it!
-            if (_TankReport_Panel != INVALID_HANDLE) CloseHandle(_TankReport_Panel);
+            if (_TankReport_Panel != INVALID_HANDLE)
+            {
+                CloseHandle(_TankReport_Panel);
+            }
             _TankReport_Panel = CreatePanel();
             
             decl String:sBuffer[512];
-            Format(sBuffer, sizeof(sBuffer), "Tank Damage Report", PLUGIN_TAG);
-            SetPanelTitle(_TankReport_Panel, sBuffer);
+            SetPanelTitle(_TankReport_Panel, "Tank Damage Report");
             
             new survivorIndex = -1;
-            decl survivorClients[MaxClients];
+            decl survivorClients[SURVIVOR_LIMIT];
             decl damage, totalDamage;
             
             // Iterate over all survivors
@@ -225,17 +230,27 @@ public _TankReport_Report_To_Players(Handle:event, const String:name[], bool:don
                 
                 survivorIndex ++;
                 survivorClients[survivorIndex] = survivor;
-                damage = damageReport[survivor];
-                totalDamage += damage;
+                totalDamage += damageReport[survivor];
             }
-            SortCustom1D(survivorClients, 4, _TankReport_SortByDamageDesc);
+            SortCustom1D(survivorClients, SURVIVOR_LIMIT, _TankReport_SortByDamageDesc);
             // survivorClients is now sorted in order of who did most damage.
 
-            new healthDiff = tankTotalHp - totalDamage;
+            new healthDiff = _TankReport_Tank_Total_HP - totalDamage;
             new const maxLen = 1024;
             decl String:result[maxLen];
-            decl String:clientName[MAX_NAME_LENGTH];
-            decl survivor;
+            decl survivor, damagePercent;
+            
+            if (_TankReport_Tank_Total_HP > totalDamage)
+            {
+                new hpRemaining = _TankReport_Tank_Total_HP - totalDamage;
+                Format(result, maxLen, "Total HP: %i", hpRemaining);
+                DrawPanelText(_TankReport_Panel, result);
+            }
+            else
+            {
+                Format(result, maxLen, "Total HP: %i", _TankReport_Tank_Total_HP);
+                DrawPanelText(_TankReport_Panel, result);
+            }
             
             for (new i; i <= survivorIndex; i++)
             {
@@ -247,8 +262,8 @@ public _TankReport_Report_To_Players(Handle:event, const String:name[], bool:don
                     damage += healthDiff;
                     healthDiff = 0;
                 }
-                GetClientName(survivor, clientName, sizeof(clientName));
-                Format(result, maxLen, "%N: %i (%d%%)", clientName, damageReport[survivor], _TankReport_GetDamageAsPercent(damage, totalDamage));
+                damagePercent = _TankReport_GetDamageAsPercent(damage, _TankReport_Tank_Total_HP);
+                Format(result, maxLen, "%N: %i (%d%%)", survivor, damage, damagePercent);
                 DrawPanelText(_TankReport_Panel, result);
             }
     
@@ -266,7 +281,8 @@ public _TankReport_Report_To_Players(Handle:event, const String:name[], bool:don
             {
                 damageReport[i] = 0;
             }
-            survivorsStanding = Get_Survivor_Count();
+            
+            CloseHandle(_TankReport_Panel);
         }
         
         // Lastly...
@@ -277,9 +293,9 @@ public _TankReport_Report_To_Players(Handle:event, const String:name[], bool:don
 /**
  * Helper method for finding the damage as a percent of the total damage.
  */
-public Float:_TankReport_GetDamageAsPercent(damage, totalDamage)
+public _TankReport_GetDamageAsPercent(damage, totalDamage)
 {
-    return FloatMul(FloatDiv(float(damage), float(totalDamage)), 100.0);
+    return RoundToFloor(FloatMul(FloatDiv(float(damage), float(totalDamage)), 100.0));
 }
 
 /**

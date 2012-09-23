@@ -163,6 +163,7 @@ public _HC_OnPluginDisable()
     UnhookEvent("round_start", _HC_RoundStart_Event, EventHookMode_PostNoCopy);
     UnhookEvent("player_left_start_area", _HC_PlayerLeftSafeRoom_Event, EventHookMode_PostNoCopy);
     UnhookEvent("round_end", _HC_RoundEnd_Event, EventHookMode_PostNoCopy);
+    UnhookPublicEvent(EVENT_ONMAPSTART, _HC_OnMapStart);
     UnhookPublicEvent(EVENT_ONMAPEND, _HC_OnMapEnd);
     UnhookPublicEvent(EVENT_ONENTITYCREATED, _HC_OnEntityCreated);
     UnhookConVarChange(g_hHealthStyle_Cvar, _HC_HealthStyle_CvarChange);

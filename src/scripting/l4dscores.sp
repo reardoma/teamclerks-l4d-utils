@@ -198,7 +198,7 @@ TODO:
 /*
 * For testing?
 */
-#define SCORE_CAMPAIGN_OVERRIDE 0
+#define SCORE_CAMPAIGN_OVERRIDE 1
 #define SCORE_TEAM_PLACEMENT_OVERRIDE 0
 
 /*
@@ -522,7 +522,7 @@ public Action:Event_RoundEnd(Handle:event, const String:name[], bool:dontBroadca
         
         if(!IsFirstRound())
         {
-#if SCORE_CAMPAIGN_OVERRIDE
+#if !SCORE_DEBUG || SCORE_CAMPAIGN_OVERRIDE
                 // This call ONLY works in linux.
                 SDKCall(fSetCampaignScores, campaignScores[SCORE_TEAM_A], campaignScores[SCORE_TEAM_B]);
                 

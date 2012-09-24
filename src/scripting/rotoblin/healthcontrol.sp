@@ -677,8 +677,12 @@ static UpdateStartingHealthItems()
     
     entity = -1;
     
+    if (g_iHealthStyle == SAFEROOM_KITS_ONLY)
+    {
+        RemoveAllPills();
+    }
     // Then, if we're using the hardcore setting, remove all pills from the map excluding the finale sets
-    if (g_iHealthStyle == SAFEROOM_AND_FINALE_PILLS_ONLY || g_iHealthStyle == SAFEROOM_KITS_ONLY)
+    if (g_iHealthStyle == SAFEROOM_AND_FINALE_PILLS_ONLY)
     {       
         if (g_bIsFinale)
         {

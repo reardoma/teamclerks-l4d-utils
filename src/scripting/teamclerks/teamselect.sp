@@ -55,9 +55,27 @@ public Action:Attempt_Swap_To_Survivor(client, const String:command[], argc)
         {
             FakeClientCommand(client, "sb_takecontrol %s", botNames[i]);
             localClientTeam = GetClientTeam(client);
+            if (!IsPlayerAlive(client))
+            {
+                // This is kind of dirty, but it will continue the loop even
+                // the client got a dead survivor and try to find a living
+                // one; if there are no living ones, then the player is stuck
+                // playing the dead one.
+                localClientTeam = TEAM_SPECTATOR;
+            }
             i++;
         }
         SetCommandFlags("sb_takecontrol", flags);
+        
+        // They MAY have swapped out to spawn in a bot infected... kill that bot.
+        for (i = 1; i < MaxClients; i++)
+        {
+            if (Is_Client_Infected(i) && !Is_Valid_Player_Client(i))
+            {
+                // This is a bot infected.
+                ForcePlayerSuicide(i);
+            }
+        }
     }
     
     return Plugin_Handled;
@@ -98,6 +116,17 @@ public Action:Swap_To_Spectator(client, const String:command[], argc)
         GetClientName(client, clientname, sizeof(clientname));
         TC_Debug("Moving %s to spectator team.", clientname);
         ChangeClientTeam(client, TEAM_SPECTATOR);
+
+        // They MAY have swapped out to spawn in a bot infected... kill that bot.
+        for (new i = 1; i < MaxClients; i++)
+        {
+            if (Is_Client_Infected(i) && !Is_Valid_Player_Client(i))
+            {
+                // This is a bot infected.
+                ForcePlayerSuicide(i);
+            }
+        }
+        
         return Plugin_Handled;
     }
     

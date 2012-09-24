@@ -161,11 +161,11 @@ public OnPluginStartEx()
     _H_CommandManager_OnPluginStart();
     
     _CvarSilencer_OnPluginStart();
-    _Load_OnPluginStart();
     _SkeetPractice_OnPluginStart();
     _1v1_OnPluginStart();
     _TeamSelect_OnPluginStart();
     _TankReport_OnPluginStart();
+    _Load_OnPluginStart();
     
     // Create cvar for control plugin state
     Format(buffer, sizeof(buffer), "Sets whether %s is enabled", PLUGIN_FULLNAME);

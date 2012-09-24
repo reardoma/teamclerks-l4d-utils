@@ -69,19 +69,6 @@ public _Load_OnPluginStart()
 
     AddCommandListener(_Load_OnClientCommandIssued, "say");
     AddCommandListener(_Load_OnClientCommandIssued, "say_team");
-    
-    //HookPublicEvent(EVENT_ONCLIENTDISCONNECT_POST, _Load_OnClientDisconnectPost);
-
-    //_Load_Load_Default_If_Present();
-}
-
-public _Load_OnClientDisconnectPost(client)
-{
-    if (!Server_Has_Player_Clients())
-    {
-        // No clients, load the default.
-        _Load_Load_Default_If_Present();
-    }
 }
 
 public Action:_Load_OnCommandForce(client, args)
@@ -342,20 +329,6 @@ _Load_Load_Module(String:target[])
         _Load_End_Vote(target);
         // Load it!
         ServerCommand("exec %s", loadable);
-    }
-}
-
-/**
- * Loads the default config if present.
- */
-_Load_Load_Default_If_Present()
-{
-    decl String:defalt[MAX_NAME_LENGTH];
-    
-    if (_Load_Check_Module("DEFAULT", defalt) && !StrEqual("", defalt))
-    {
-        // Okay, there IS a default value specified
-        _Load_Load_Module(defalt);
     }
 }
 

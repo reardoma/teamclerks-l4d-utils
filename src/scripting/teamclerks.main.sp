@@ -163,8 +163,8 @@ public OnPluginStartEx()
     _CvarSilencer_OnPluginStart();
     _SkeetPractice_OnPluginStart();
     _1v1_OnPluginStart();
-    _TeamSelect_OnPluginStart();
-    _TankReport_OnPluginStart();
+    //_TeamSelect_OnPluginStart();
+    //_TankReport_OnPluginStart();
     _Load_OnPluginStart();
     
     // Create cvar for control plugin state

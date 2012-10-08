@@ -36,26 +36,6 @@ forward Action:L4D_OnSpawnTank(const Float:vector[3], const Float:qangle[3]);
 forward Action:L4D_OnSpawnWitch(const Float:vector[3], const Float:qangle[3]);
 
 /**
- * @brief Called whenever CTerrorGameRules::ClearTeamScores(bool) is invoked
- * @remarks     This resets the map score at the beginning of a map, and by checking 
- *                the campaign scores on a small timer you can see if they were reset as well.
- * 
- * @param newCampaign  if true then this is a new campaign, if false a new chapter
- * @return      Pl_Handled to block scores from being cleared, Pl_Continue otherwise.
- */
-forward Action:L4D_OnClearTeamScores(bool:newCampaign);
-
-/**
- * @brief Called whenever CTerrorGameRules::SetCampaignScores(int,int) is invoked
- * @remarks The campaign scores are updated after the 2nd round is completed
- * 
- * @param scoreA  score of logical team A
- * @param scoreB  score of logical team B
- * @return      Pl_Handled to block campaign scores from being set, Pl_Continue otherwise.
- */
-forward Action:L4D_OnSetCampaignScores(&scoreA, &scoreB);
-
-/**
  * @brief Called whenever CDirector::OnFirstSurvivorLeftSafeArea
  * @remarks A versus round is started when survivors leave the safe room, or force started
  *          after 90 seconds regardless.
@@ -65,19 +45,6 @@ forward Action:L4D_OnSetCampaignScores(&scoreA, &scoreB);
  * @return      Pl_Handled to block round from being started, Pl_Continue otherwise.
  */
 forward Action:L4D_OnFirstSurvivorLeftSafeArea(client);
-
-/**
- * @brief Get the current campaign scores stored in the Director
- * @remarks The campaign scores are updated after L4D_OnSetCampaignScores
- * 
- * @deprecated This will set the scores to -1 for both sides on L4D2,
- *               this function is no longer supported.
- * 
- * @param scoreA  score of logical team A
- * @param scoreB  score of logical team B
- * @return      1 always
- */
-native L4D_GetCampaignScores(&scoreA, &scoreB);
 
 /**
  * @brief Get the team scores for the current map
@@ -94,13 +61,6 @@ native L4D_GetCampaignScores(&scoreA, &scoreB);
  *                or the team's campaign score if campaign_score = true
  */
 native L4D_GetTeamScore(logical_team, campaign_score=false);
-
-/**
- * @brief Restarts the setup timer (when in scavenge mode)
- * @remarks If game has already started, the setup timer will show,
- *           but it still won't go back into setup.
- */
-native L4D_ScavengeBeginRoundSetupTime();
 
 /**
  * @brief Restarts the round, switching the map if necessary
@@ -233,7 +193,7 @@ new Handle:liveTimer;
 new bool:unreadyTimerExists;
 
 new Handle:cvarEnforceReady = INVALID_HANDLE;
-new Handle:cvarReadyCompetition = INVALID_HANDLE;
+//new Handle:cvarReadyCompetition = INVALID_HANDLE;
 new Handle:cvarReadyMinimum = INVALID_HANDLE;
 new Handle:cvarReadyHalves = INVALID_HANDLE;
 new Handle:cvarReadyServerCfg = INVALID_HANDLE;
@@ -314,15 +274,17 @@ public OnPluginStart()
     RegConsoleCmd("sm_rates", ratesCommand);    //Prints net information about players
     RegConsoleCmd("zack_netinfo", ratesCommand);    //Some people...
     
-    //RegConsoleCmd("sm_sur", Join_Survivor);
-    //RegConsoleCmd("sm_inf", Join_Infected);
-    //RegConsoleCmd("sm_survivor", Join_Survivor);
-    //RegConsoleCmd("sm_infected", Join_Infected);
+    RegConsoleCmd("sm_sur", Join_Survivor);
+    RegConsoleCmd("sm_inf", Join_Infected);
+    RegConsoleCmd("sm_survivor", Join_Survivor);
+    RegConsoleCmd("sm_infected", Join_Infected);
     
     //block all voting if we're enforcing ready mode
     //we only temporarily allow votes to fake restart the campaign
     RegConsoleCmd("callvote", callVote);
     
+    RegConsoleCmd("sm_spec", Command_Spectate);
+    RegConsoleCmd("sm_spectate", Command_Spectate);
     RegConsoleCmd("spectate", Command_Spectate);
     RegConsoleCmd("sm_respec", Respec_Client);
     RegConsoleCmd("sm_respectate", Respec_Client);
@@ -384,7 +346,7 @@ public OnPluginStart()
     
     CreateConVar("l4d_ready_version", READY_VERSION, "Version of the ready up plugin.", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
     cvarEnforceReady = CreateConVar("l4d_ready_enabled", "1", "Make players ready up before a match begins", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
-    cvarReadyCompetition = CreateConVar("l4d_ready_competition", "0", "Disable all plugins but a few competition-allowed ones", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
+    //cvarReadyCompetition = CreateConVar("l4d_ready_competition", "0", "Disable all plugins but a few competition-allowed ones", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
     cvarReadyHalves = CreateConVar("l4d_ready_both_halves", "0", "Make players ready up both during the first and second rounds of a map", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
     cvarReadyMinimum = CreateConVar("l4d_ready_minimum_players", "8", "Minimum # of players before we can ready up", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
     cvarReadyServerCfg = CreateConVar("l4d_ready_server_cfg", "", "Config to execute when the map is changed (to exec after server.cfg).", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_NOTIFY);
@@ -411,7 +373,7 @@ public OnPluginStart()
     cvarSearchKey = FindConVar("sv_search_key");
     
     HookConVarChange(cvarEnforceReady, ConVarChange_ReadyEnabled);
-    HookConVarChange(cvarReadyCompetition, ConVarChange_ReadyCompetition);
+    //HookConVarChange(cvarReadyCompetition, ConVarChange_ReadyCompetition);
     HookConVarChange(cvarSearchKey, ConVarChange_SearchKey);
     
     #if HEALTH_BONUS_FIX
@@ -541,6 +503,89 @@ stock GetTeamMaxHumans(team)
     }
     
     return -1;
+}
+
+public Action:Join_Survivor(client, args)	//on !survivor
+{	
+	new maxSurvivorSlots = GetTeamMaxHumans(2);
+	new survivorUsedSlots = GetTeamHumanCount(2);
+	new freeSurvivorSlots = (maxSurvivorSlots - survivorUsedSlots);
+	//debug
+	//PrintToChatAll("Number of Survivor Slots %d.\nNumber of Survivor Players %d.\nNumber of Free Slots %d.", maxSurvivorSlots, survivorUsedSlots, freeSurvivorSlots);
+	
+	if (GetClientTeam(client) == 2)			//if client is survivor
+	{
+		PrintToChat(client, "[SM] You are already on the Survivor team.");
+		return Plugin_Handled;
+	}
+	if (freeSurvivorSlots <= 0)
+	{
+		PrintToChat(client, "[SM] Survivor team is full.");
+		return Plugin_Handled;
+	}
+	else
+	{
+		new bot;
+		
+		for(bot = 1; 
+			bot < (MaxClients + 1) && (!IsClientConnected(bot) || !IsFakeClient(bot) || (GetClientTeam(bot) != 2));
+			bot++) {}
+		
+		if(bot == (MaxClients + 1))
+		{			
+			new String:command[] = "sb_add";
+			new flags = GetCommandFlags(command);
+			SetCommandFlags(command, flags & ~FCVAR_CHEAT);
+			
+			ServerCommand("sb_add");
+			
+			SetCommandFlags(command, flags);
+		}
+		CreateTimer(0.1, Survivor_Take_Control, client, TIMER_FLAG_NO_MAPCHANGE);
+	}
+	return Plugin_Handled;
+}
+
+public Action:Survivor_Take_Control(Handle:timer, any:client)
+{
+		new localClientTeam = GetClientTeam(client);
+		new String:command[] = "sb_takecontrol";
+		new flags = GetCommandFlags(command);
+		SetCommandFlags(command, flags & ~FCVAR_CHEAT);
+		new String:botNames[][] = { "teengirl", "manager", "namvet", "biker" };
+		
+		new i = 0;
+		while((localClientTeam != 2) && i < 4)
+		{
+			FakeClientCommand(client, "sb_takecontrol %s", botNames[i]);
+			localClientTeam = GetClientTeam(client);
+			i++;
+		}
+		SetCommandFlags(command, flags);
+}
+
+
+public Action:Join_Infected(client, args)	//on !infected
+{	
+	new maxInfectedSlots = GetTeamMaxHumans(3);
+	new infectedUsedSlots = GetTeamHumanCount(3);
+	new freeInfectedSlots = (maxInfectedSlots - infectedUsedSlots);
+	//PrintToChatAll("Number of Infected Slots %d.\nNumber of Infected Players %d.\nNumber of Free Slots %d.", maxInfectedSlots, infectedUsedSlots, freeInfectedSlots);
+	if (GetClientTeam(client) == 3)			//if client is infected
+	{
+		PrintToChat(client, "[SM] You are already on the Infected team.");
+		return Plugin_Handled;
+	}
+	if (freeInfectedSlots <= 0)
+	{
+		PrintToChat(client, "[SM] Infected team is full.");
+		return Plugin_Handled;
+	}
+	else
+	{
+		ChangeClientTeam(client, 3);	//ServerCommand("sm_swapto %N 3",client);	//swapping the client to the infected team if he is spectator or survivor
+	}
+	return Plugin_Handled;
 }
 
 /**
@@ -2417,53 +2462,6 @@ public ConVarChange_ReadyEnabled(Handle:convar, const String:oldValue[], const S
             readyOff();
         }
         RestartMapDelayed();
-    }
-}
-
-
-//disable most non-competitive plugins
-public ConVarChange_ReadyCompetition(Handle:convar, const String:oldValue[], const String:newValue[])
-{
-    if(oldValue[0] == newValue[0])
-    {
-        return;
-    }
-    else
-    {
-        new value = StringToInt(newValue);
-        
-        if(value)
-        {
-            //TODO: use plugin iterators such as GetPluginIterator
-            // to unload all plugins BUT the ones below
-            
-            ServerCommand("sm plugins load_unlock");
-            ServerCommand("sm plugins unload_all");
-            ServerCommand("sm plugins load basebans.smx");
-            ServerCommand("sm plugins load basecommands.smx");
-            ServerCommand("sm plugins load admin-flatfile.smx");
-            ServerCommand("sm plugins load adminhelp.smx");
-            ServerCommand("sm plugins load adminmenu.smx");
-            ServerCommand("sm plugins load l4dscores.smx"); //IMPORTANT: load before l4dready!
-            ServerCommand("sm plugins load l4dready.smx");
-            ServerCommand("sm plugins load_lock");
-            
-            DebugPrintToAll("Competition mode enabled, plugins unloaded...");
-            
-            //TODO: also call sm_restartmap and sm_resetscores
-            // this removes the dependency from configs to know what to do :)
-            
-            //Maybe make this command sm_competition_on, sm_competition_off ?
-            //that way people will probably not use in server.cfg 
-            // and they can exec the command over and over and it will be fine
-        }
-        else
-        {
-            ServerCommand("sm plugins load_unlock");
-            ServerCommand("sm plugins refresh");
-
-            DebugPrintToAll("Competition mode enabled, plugins reloaded...");
-        }
     }
 }
 

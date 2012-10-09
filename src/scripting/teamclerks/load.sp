@@ -47,10 +47,6 @@ new          String: currentlyLoaded[]            = "";
 // --------------------
 static       Handle: TC_CONFIG                    = INVALID_HANDLE;
 
-static const String: TC_LOAD_CMD[]                = "load";
-static const String: TC_FORCE_LOAD_CMD[]          = "force";
-
-
 // **********************************************
 //             Forwards
 // **********************************************
@@ -65,79 +61,61 @@ public _Load_OnPluginStart()
     TC_CONFIG = LoadGameConfigFile("teamclerks.load");
     GameConfGetKeyValue(TC_CONFIG, "DEFAULT", currentlyLoaded, MAX_NAME_LENGTH);
 
-    RegAdminCmd("tc_force", _Load_OnCommandForce, ADMFLAG_CHANGEMAP, "tc_force - force the loading of a modual");
-
-    AddCommandListener(_Load_OnClientCommandIssued, "say");
-    AddCommandListener(_Load_OnClientCommandIssued, "say_team");
+    RegAdminCmd("sm_force", _Load_OnCommandForce, ADMFLAG_CHANGEMAP, "sm_force <module> - force the loading of a modual.");
+    RegConsoleCmd("sm_load", _Load_OnCommandLoad, "sm_load <module> - vote to load a module.");
 }
 
+/**
+ * Handler method for the load command. Is called when an admin client issues
+ * 'sm_force' from the console or uses '!force' or '/force' from chat.
+ */
 public Action:_Load_OnCommandForce(client, args)
 {
-    decl String:moduleName[MAX_NAME_LENGTH];
-    
-    if (GetCmdArg(1, moduleName, sizeof(moduleName)) > 0)
+    if (args < 1)
     {
-        // Means there was a module specified to load.
-        _Load_Load_Module(moduleName);
-    }
-}
-
-public Action:_Load_OnClientCommandIssued(client, const String:command[], argc)
-{
-    if (argc < 1)
-    {
-        return Plugin_Continue;
-    }
-
-    decl String:sayWord[MAX_NAME_LENGTH];
-    GetCmdArg(1, sayWord, sizeof(sayWord));
-    
-    if (StrContains(sayWord, "!", false) != 0)
-    {
-        // We ONLY allow !-commands
-        return Plugin_Continue;
-    }
-    
-    decl String:tokens[32][MAX_NAME_LENGTH];
-    ExplodeString(sayWord, " ", tokens, 32, MAX_NAME_LENGTH);
-    
-    // Get the first command; might be 'load', 'force', etc.
-    new idx = StrContains(sayWord, TC_LOAD_CMD, false);
-    
-    // !LOAD
-    if (idx == 1)
-    {
-        if (!_Load_Check_Module(tokens[1]))
-        {
-            PrintToChat(client, "Module %s not available", tokens[1]);
-            return Plugin_Continue;
-        }
-        
-        _Load_Vote_On_Module(client, tokens[1]);
-        
+        ReplyToCommand(client, "[SM] Usage: sm_force <module> - force a module to load.");        
         return Plugin_Handled;
     }
     
-    idx = StrContains(command, TC_FORCE_LOAD_CMD, false);
+    decl String:module[64];
+    GetCmdArg(1, module, sizeof(module));
     
-    // !FORCELOAD
-    if (idx == 1)
+    if (!_Load_Check_Module(module))
     {
-        if (CheckCommandAccess(client, "tc_force", 0))
-        {            
-            if (!_Load_Check_Module(tokens[1]))
-            {
-                return Plugin_Continue;
-            }
-            
-            // Admin can use tc_force... do it.
-            _Load_Load_Module(tokens[1]);
-            
-            return Plugin_Handled;
-        }
+        PrintToChat(client, "Module '%s' not available", module);
+        return Plugin_Handled;
     }
     
-    return Plugin_Continue;
+    // There was a good module specified to load.
+    _Load_Load_Module(module);
+    
+    return Plugin_Handled;
+}
+
+/**
+ * Handler method for the load command. Is called when a client issues
+ * 'sm_load' from the console or uses '!load' or '/load' from chat.
+ */
+public Action:_Load_OnCommandLoad(client, args)
+{
+    if (args < 1)
+    {
+        ReplyToCommand(client, "[SM] Usage: sm_load <module> - vote to load a module.");        
+        return Plugin_Handled;
+    }
+    
+    decl String:module[64];
+    GetCmdArg(1, module, sizeof(module));
+    
+    if (!_Load_Check_Module(module))
+    {
+        PrintToChat(client, "Module '%s' not available", module);
+        return Plugin_Handled;
+    }
+    
+    _Load_Vote_On_Module(client, module);
+    
+    return Plugin_Handled;
 }
 
 /**
@@ -205,6 +183,13 @@ bool:_Load_Is_Vote_Passing(bool:requireAll=false)
     }
     
     new survsAndInfs = Get_Survivor_Player_Count() + Get_Infected_Player_Count();
+    
+    if (survsAndInfs == 0)
+    {
+        // No div-zeros please; this will happen if there are no players
+        // in the server and the console-admin issues a load.
+        survsAndInfs = 1;
+    }
     
     new Float:percent = FloatDiv(float(yesVotes), float(survsAndInfs));
     

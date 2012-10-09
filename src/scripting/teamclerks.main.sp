@@ -74,15 +74,11 @@
 #include "rotoblin/helpers/tankmanager.inc"
 
 #include "teamclerks/helpers/clients.inc"
-#include "teamclerks/helpers/restartmap.inc"
-#include "teamclerks/helpers/colors.inc"
 
 #include "teamclerks/cvarsilencer.sp"
 #include "teamclerks/load.sp"
 #include "teamclerks/skeetpractice.sp"
 #include "teamclerks/1v1.sp"
-#include "teamclerks/teamselect.sp"
-#include "teamclerks/tankreport.sp"
 
 // --------------------
 //       Private
@@ -163,8 +159,6 @@ public OnPluginStartEx()
     _CvarSilencer_OnPluginStart();
     _SkeetPractice_OnPluginStart();
     _1v1_OnPluginStart();
-    //_TeamSelect_OnPluginStart();
-    //_TankReport_OnPluginStart();
     _Load_OnPluginStart();
     
     // Create cvar for control plugin state

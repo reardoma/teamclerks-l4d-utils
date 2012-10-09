@@ -61,7 +61,7 @@ public OnMapStart()
 public OnClientDisconnect_Post(client)
 {
     if (!g_bIsTankInPlay || client != g_iTankClient) return;
-        CreateTimer(0.1, Timer_CheckTank, client); // Use a delayed timer due to bugs where the tank passes to another player
+    CreateTimer(0.1, Timer_CheckTank, client); // Use a delayed timer due to bugs where the tank passes to another player
 }
 
 public Cvar_Enabled(Handle:convar, const String:oldValue[], const String:newValue[])
@@ -120,7 +120,7 @@ public Event_PlayerKilled(Handle:event, const String:name[], bool:dontBroadcast)
     if (attacker && IsClientInGame(attacker)) g_iDamage[attacker] += g_iLastTankHealth;
     
     // Damage announce could probably happen right here...
-        CreateTimer(0.1, Timer_CheckTank, victim); // Use a delayed timer due to bugs where the tank passes to another player
+    CreateTimer(0.1, Timer_CheckTank, victim); // Use a delayed timer due to bugs where the tank passes to another player
 }
 
 public Event_TankSpawn(Handle:event, const String:name[], bool:dontBroadcast)
@@ -190,7 +190,7 @@ PrintRemainingHealth()
     decl String:name[MAX_NAME_LENGTH];
     if (IsFakeClient(tankclient)) name = "AI";
     else GetClientName(tankclient, name, sizeof(name));
-        PrintToChatAll("\x01[SM] Tank (\x03%s\x01) had \x05%d\x01 health remaining", name, g_iLastTankHealth);
+    PrintToChatAll("\x01[SM] Tank (\x03%s\x01) had \x05%d\x01 health remaining", name, g_iLastTankHealth);
 }
 
 PrintTankDamage()
@@ -246,7 +246,7 @@ PrintTankDamage()
                 percent_adjustment = 0;
             }
         }
-                PrintToChatAll("\x05%4d\x01 [\x04%d%%\x01]: \x03%N\x01", damage, percent_damage, client);
+        PrintToChatAll("\x05%4d\x01 [\x04%d%%\x01]: \x03%N\x01", damage, percent_damage, client);
     }
 }
 

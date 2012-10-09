@@ -274,7 +274,7 @@ public OnPluginStart()
     RegConsoleCmd("sm_rates", ratesCommand);    //Prints net information about players
     RegConsoleCmd("zack_netinfo", ratesCommand);    //Some people...
     
-    RegConsoleCmd("sm_sur", Join_Survivor);
+    RegConsoleCmd("sm_surv", Join_Survivor);
     RegConsoleCmd("sm_inf", Join_Infected);
     RegConsoleCmd("sm_survivor", Join_Survivor);
     RegConsoleCmd("sm_infected", Join_Infected);

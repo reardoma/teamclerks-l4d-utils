@@ -252,59 +252,64 @@ PrintTankDamage()
 
 ClearTankDamage()
 {
-g_iLastTankHealth = 0;
-for (new i = 1; i <= MaxClients; i++) { g_iDamage[i] = 0; }
-g_bAnnounceTankDamage = false;
+    g_iLastTankHealth = 0;
+    for (new i = 1; i <= MaxClients; i++)
+    {
+        g_iDamage[i] = 0;
+    }
+    g_bAnnounceTankDamage = false;
 }
 
 
 GetTankClient()
 {
-if (!g_bIsTankInPlay) return 0;
-
-new tankclient = g_iTankClient;
-
-if (!IsClientInGame(tankclient)) // If tank somehow is no longer in the game (kicked, hence events didn't fire)
-{
-tankclient = FindTankClient(); // find the tank client
-if (!tankclient) return 0;
-g_iTankClient = tankclient;
-}
-
-return tankclient;
+    if (!g_bIsTankInPlay) return 0;
+    
+    new tankclient = g_iTankClient;
+    
+    if (!IsClientInGame(tankclient)) // If tank somehow is no longer in the game (kicked, hence events didn't fire)
+    {
+        tankclient = FindTankClient(); // find the tank client
+        if (!tankclient) return 0;
+        g_iTankClient = tankclient;
+    }
+    
+    return tankclient;
 }
 
 FindTankClient()
 {
-for (new client = 1; client <= MaxClients; client++)
-{
-if (!IsClientInGame(client) ||
-GetClientTeam(client) != TEAM_INFECTED ||
-!IsPlayerAlive(client) ||
-GetEntProp(client, Prop_Send, "m_zombieClass") != ZOMBIECLASS_TANK)
-continue;
-
-return client; // Found tank, return
-}
-return 0;
+    for (new client = 1; client <= MaxClients; client++)
+    {
+        if (!IsClientInGame(client) ||
+            GetClientTeam(client) != TEAM_INFECTED ||
+            !IsPlayerAlive(client) ||
+            GetEntProp(client, Prop_Send, "m_zombieClass") != ZOMBIECLASS_TANK)
+        {
+            continue;
+        }
+        
+        return client; // Found tank, return
+    }
+    return 0;
 }
 
 GetDamageAsPercent(damage)
 {
-return RoundToFloor(FloatMul(FloatDiv(float(damage), g_fMaxTankHealth), 100.0));
+    return RoundToFloor(FloatMul(FloatDiv(float(damage), g_fMaxTankHealth), 100.0));
 }
 
 bool:IsExactPercent(damage)
 {
-return (FloatAbs(float(GetDamageAsPercent(damage)) - FloatMul(FloatDiv(float(damage), g_fMaxTankHealth), 100.0)) < 0.001) ? true:false;
+    return FloatAbs(float(GetDamageAsPercent(damage)) - FloatMul(FloatDiv(float(damage), g_fMaxTankHealth), 100.0)) < 0.001;
 }
 
 public SortByDamageDesc(elem1, elem2, const array[], Handle:hndl)
 {
-// By damage, then by client index, descending
-if (g_iDamage[elem1] > g_iDamage[elem2]) return -1;
-else if (g_iDamage[elem2] > g_iDamage[elem1]) return 1;
-else if (elem1 > elem2) return -1;
-else if (elem2 > elem1) return 1;
-return 0;
+    // By damage, then by client index, descending
+    if (g_iDamage[elem1] > g_iDamage[elem2]) return -1;
+    else if (g_iDamage[elem2] > g_iDamage[elem1]) return 1;
+    else if (elem1 > elem2) return -1;
+    else if (elem2 > elem1) return 1;
+    return 0;
 }

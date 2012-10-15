@@ -68,6 +68,9 @@
       <arg line="-D${src} &quot;tankannounce.sp&quot;" />
     </exec>
     <exec executable="${sourcePawn}" failonerror="true">
+      <arg line="-D${src} &quot;skeetannounce.sp&quot;" />
+    </exec>
+    <exec executable="${sourcePawn}" failonerror="true">
       <arg line="-D${src} &quot;rotoblin.main.sp&quot;" />
     </exec>
     <exec executable="${sourcePawn}" failonerror="true">
@@ -82,6 +85,7 @@
     <!-- <move file="${src}/l4dscores.smx" tofile="${build}/l4dscores.smx" /> -->
     <move file="${src}/lerps.smx" tofile="${build}/lerps.smx" />
     <move file="${src}/tankannounce.smx" tofile="${build}/tankannounce.smx" />
+    <move file="${src}/skeetannounce.smx" tofile="${build}/skeetannounce.smx" />
     <!-- <copy file="${sm.plugins}/l4dscores.smx" tofile="${build}/l4dscores.smx" /> -->
     <move file="${src}/rotoblin.main.smx" tofile="${build}/rotoblin.smx" />
     <move file="${src}/${pluginName}.smx" tofile="${build}/${plugin}.smx" />
@@ -96,6 +100,7 @@
     <!-- <move file="${src}/l4dscores.smx" tofile="${dist}/addons/sourcemod/plugins/l4dscores.smx" /> -->
     <move file="${src}/lerps.smx" tofile="${dist}/addons/sourcemod/plugins/lerps.smx" />
     <move file="${src}/tankannounce.smx" tofile="${dist}/addons/sourcemod/plugins/tankannounce.smx" />
+    <move file="${src}/skeetannounce.smx" tofile="${dist}/addons/sourcemod/plugins/skeetannounce.smx" />
     <!-- <copy file="${sm.plugins}/l4dscores.smx" tofile="${dist}/addons/sourcemod/plugins/l4dscores.smx" /> -->
     <move file="${src}/rotoblin.main.smx" tofile="${dist}/addons/sourcemod/plugins/rotoblin.smx" />
     <move file="${src}/${pluginName}.smx" toFile="${dist}/addons/sourcemod/plugins/${plugin}.smx" />

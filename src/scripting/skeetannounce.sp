@@ -82,7 +82,7 @@ public Event_PlayerHurt(Handle:event, const String:name[], bool:dontBroadcast)
                     headshots[victim][attacker]++;
             }
             if(GetConVarInt(hVerbosity) & FL_ALLSKEET)
-                PrintToChatAll("%s skeeted %s in the %s with %s for %d HP",attackerName,victimName,hitboxNames[hitGroup],weapon,damage);
+                PrintToChatAll("\x01[SM] \x05%s\x01 skeeted \x05%s\x01 in the \x05%s\x01 with \x05%s\x01 for \x05%d\x01 HP",attackerName,victimName,hitboxNames[hitGroup],weapon,damage);
         }
     }
 }
@@ -106,9 +106,9 @@ public Event_PlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
                     {
                         GetClientName(i,playerName,sizeof(playerName));
                         if(headshots[victim][i] > 0)
-                            PrintToChatAll("%s skeeted %s, landing %d bullet(s) with %d headshot(s) for %d damage", playerName,victimName,hitsDone[victim][i],headshots[victim][i],damageDone[victim][i]);
+                            PrintToChatAll("\x01[SM] \x05%s\x01 skeeted \x05%s\x01, landing \x05%d\x01 bullet(s) with \x05%d\x01 headshot(s) for \x05%d\x01 damage", playerName,victimName,hitsDone[victim][i],headshots[victim][i],damageDone[victim][i]);
                         else
-                            PrintToChatAll("%s skeeted %s, landing %d bullet(s) for %d damage", playerName,victimName,hitsDone[victim][i],damageDone[victim][i]);
+                            PrintToChatAll("\x01[SM] \x05%s\x01 skeeted \x05%s\x01, landing \x05%d\x01 bullet(s) for \x05%d\x01 damage", playerName,victimName,hitsDone[victim][i],damageDone[victim][i]);
                     }
                     // Maybe they left the game; whatever the case, set their hits/damage/hs to zero.
                     hitsDone[victim][i] = 0;

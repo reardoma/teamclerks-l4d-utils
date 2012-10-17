@@ -1,72 +1,112 @@
+// **********************************************
+//                 Preprocessor
+// **********************************************
+
 #pragma semicolon 1
+
+// **********************************************
+//                   Reference
+// **********************************************
+
+#define SERVER_INDEX            0 // The client index of the server
+#define FIRST_CLIENT            1 // First valid client index
+
+// The team list
+#define TEAM_SPECTATOR          1
+#define TEAM_SURVIVOR           2
+#define TEAM_INFECTED           3
+
+#define MAX_ENTITIES            2048 // Max number of entities l4d supports
+
+// Plugin info
+#define PLUGIN_FULLNAME         "Tank Announce"                               // Used when printing the plugin name anywhere
+#define PLUGIN_SHORTNAME        "tankannounce"                                // Shorter version of the full name, used in file paths, and other things
+#define PLUGIN_AUTHOR           "Giffin and Blade; modified by kain"          // Author of the plugin
+#define PLUGIN_DESCRIPTION      "Announce damage dealt to tanks by survivors" // Description of the plugin
+#define PLUGIN_VERSION          "0.6.6"                                       // http://wiki.eclipse.org/Version_Numbering
+#define PLUGIN_URL              "http://teamclerks-l4d-utils.googlecode.com/" // URL associated with the project
+#define PLUGIN_CVAR_PREFIX      PLUGIN_SHORTNAME                              // Prefix for cvars
+#define PLUGIN_CMD_PREFIX       PLUGIN_SHORTNAME                              // Prefix for cmds
+#define PLUGIN_TAG              "TankAnnounce"                                // Tag for prints and commands
+#define PLUGIN_GAMECONFIG_FILE  PLUGIN_SHORTNAME                              // Name of gameconfig file
 
 #include <sourcemod>
 
-new const TEAM_SURVIVOR = 2;
-new const TEAM_INFECTED = 3;
-new const ZOMBIECLASS_TANK = 8; // Zombie class of the tank, used to find tank after he have been passed to another player
 new bool: g_bEnabled = true;
 new bool: g_bAnnounceTankDamage = false; // Whether or not tank damage should be announced
-new bool: g_bIsTankInPlay = false; // Whether or not the tank is active
-new g_iOffset_Incapacitated = 0; // Used to check if tank is dying
-new g_iTankClient = 0; // Which client is currently playing as tank
 new g_iLastTankHealth = 0; // Used to award the killing blow the exact right amount of damage
 new g_iSurvivorLimit = 4; // For survivor array in damage print
 new g_iDamage[MAXPLAYERS + 1];
 new Float: g_fMaxTankHealth = 6000.0;
 new Handle: g_hCvarEnabled = INVALID_HANDLE;
-new Handle: g_hCvarTankHealth = INVALID_HANDLE;
 new Handle: g_hCvarSurvivorLimit = INVALID_HANDLE;
+
+#include "rotoblin/helpers/debug.inc"
+#include "rotoblin/helpers/eventmanager.inc"
+#include "rotoblin/helpers/tankmanager.inc"
+#include "rotoblin/helpers/wrappers.inc"
 
 public Plugin:myinfo =
 {
-    name = "Tank Damage Announce L4D2",
-    author = "Griffin and Blade",
-    description = "Announce damage dealt to tanks by survivors",
-    version = "0.6.5d"
+    name = PLUGIN_FULLNAME,
+    author = PLUGIN_AUTHOR,
+    description = PLUGIN_DESCRIPTION,
+    version = PLUGIN_VERSION,
+    url = PLUGIN_URL
 };
 
-public OnPluginStart()
+public OnPluginStartEx()
 {
-    g_bIsTankInPlay = false;
-    g_bAnnounceTankDamage = false;
-    g_iTankClient = 0;
-    ClearTankDamage();
-    HookEvent("tank_spawn", Event_TankSpawn);
-    HookEvent("player_death", Event_PlayerKilled);
+    _H_TankManager_OnPluginStart();
+
+    HookPublicEvent(EVENT_ONPLUGINENABLE, _TA_OnPluginEnable);
+    HookPublicEvent(EVENT_ONPLUGINDISABLE, _TA_OnPluginDisable);
+    
+    g_hCvarEnabled = CreateConVar("l4d_tankdamage_enabled", "0", "Announce damage done to tanks when enabled", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY, true, 0.0, true, 1.0);
+    g_hCvarSurvivorLimit = FindConVar("survivor_limit");
+    
+    HookConVarChange(g_hCvarEnabled, Cvar_Enabled);
+    HookConVarChange(g_hCvarSurvivorLimit, Cvar_SurvivorLimit);
+    
+    g_bEnabled = GetConVarBool(g_hCvarEnabled);
+}
+
+public _TA_OnPluginEnable()
+{
     HookEvent("round_start", Event_RoundStart);
     HookEvent("round_end", Event_RoundEnd);
     HookEvent("player_hurt", Event_PlayerHurt);
     
-    g_hCvarEnabled = CreateConVar("l4d_tankdamage_enabled", "1", "Announce damage done to tanks when enabled", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY, true, 0.0, true, 1.0);
-    g_hCvarSurvivorLimit = FindConVar("survivor_limit");
-    g_hCvarTankHealth = FindConVar("z_tank_health");
+    g_bAnnounceTankDamage = false;
+    ClearTankDamage();
     
-    HookConVarChange(g_hCvarEnabled, Cvar_Enabled);
-    HookConVarChange(g_hCvarSurvivorLimit, Cvar_SurvivorLimit);
-    HookConVarChange(g_hCvarTankHealth, Cvar_TankHealth);
-    
-    g_bEnabled = GetConVarBool(g_hCvarEnabled);
-    CalculateTankHealth();
-    
-    g_iOffset_Incapacitated = FindSendPropInfo("Tank", "m_isIncapacitated");
+    HookPublicEvent(EVENT_ONMAPSTART, TA_OnMapStart);
 }
 
-public OnMapStart()
+public _TA_OnPluginDisable()
 {
+    
+    UnhookEvent("round_start", Event_RoundStart);
+    UnhookEvent("round_end", Event_RoundEnd);
+    UnhookEvent("player_hurt", Event_PlayerHurt);
+    
+    UnhookPublicEvent(EVENT_ONMAPSTART, TA_OnMapStart);
+}
+
+public TA_OnMapStart()
+{
+    HookTankEvent(TANK_SPAWNED, Event_TankSpawn);
+    HookTankEvent(TANK_KILLED, Event_TankKilled);
+    
     // In cases where a tank spawns and map is changed manually, bypassing round end
     ClearTankDamage();
-}
-
-public OnClientDisconnect_Post(client)
-{
-    if (!g_bIsTankInPlay || client != g_iTankClient) return;
-    CreateTimer(0.1, Timer_CheckTank, client); // Use a delayed timer due to bugs where the tank passes to another player
 }
 
 public Cvar_Enabled(Handle:convar, const String:oldValue[], const String:newValue[])
 {
     g_bEnabled = StringToInt(newValue) > 0 ? true:false;
+    
+    SetPluginState(g_bEnabled);
 }
 
 public Cvar_SurvivorLimit(Handle:convar, const String:oldValue[], const String:newValue[])
@@ -74,20 +114,9 @@ public Cvar_SurvivorLimit(Handle:convar, const String:oldValue[], const String:n
     g_iSurvivorLimit = StringToInt(newValue);
 }
 
-public Cvar_TankHealth(Handle:convar, const String:oldValue[], const String:newValue[])
-{
-    CalculateTankHealth();
-}
-
-CalculateTankHealth()
-{
-    g_fMaxTankHealth = GetConVarFloat(g_hCvarTankHealth) * 1.5;
-    if (g_fMaxTankHealth <= 0.0) g_fMaxTankHealth = 1.0; // No dividing by 0!
-}
-
 public Event_PlayerHurt(Handle:event, const String:name[], bool:dontBroadcast)
 {
-    if (!g_bIsTankInPlay) return; // No tank in play; no damage to record
+    if (!IsTankInPlay()) return; // No tank in play; no damage to record
     
     new victim = GetClientOfUserId(GetEventInt(event, "userid"));
     if (victim != GetTankClient() || // Victim isn't tank; no damage to record
@@ -106,41 +135,24 @@ public Event_PlayerHurt(Handle:event, const String:name[], bool:dontBroadcast)
     g_iLastTankHealth = GetEventInt(event, "health");
 }
 
-public Event_PlayerKilled(Handle:event, const String:name[], bool:dontBroadcast)
+public Event_TankKilled(Handle:event, const String:name[], bool:dontBroadcast)
 {
-    if (!g_bIsTankInPlay) return; // No tank in play; no damage to record
-    
-    new victim = GetClientOfUserId(GetEventInt(event, "userid"));
-    if (victim != g_iTankClient) return;
-    
-    // Award the killing blow's damage to the attacker; we don't award
-    // damage from player_hurt after the tank has died/is dying
-    // If we don't do it this way, we get wonky/inaccurate damage values
-    new attacker = GetClientOfUserId(GetEventInt(event, "attacker"));
-    if (attacker && IsClientInGame(attacker)) g_iDamage[attacker] += g_iLastTankHealth;
-    
-    // Damage announce could probably happen right here...
-    CreateTimer(0.1, Timer_CheckTank, victim); // Use a delayed timer due to bugs where the tank passes to another player
+    if (g_bAnnounceTankDamage) PrintTankDamage();
+    ClearTankDamage();
 }
 
 public Event_TankSpawn(Handle:event, const String:name[], bool:dontBroadcast)
-{
-    new client = GetClientOfUserId(GetEventInt(event, "userid"));
-    g_iTankClient = client;
-    
-    if (g_bIsTankInPlay) return; // Tank passed
-    
+{   
+    // Set the max health to whatever the health is right now since the tank hasn't taken damage yet (hopefully).
+    g_fMaxTankHealth = float(GetClientHealth(GetTankClient()));
     // New tank, damage has not been announced
     g_bAnnounceTankDamage = true;
-    g_bIsTankInPlay = true;
     // Set health for damage print in case it doesn't get set by player_hurt (aka no one shoots the tank)
-    g_iLastTankHealth = GetClientHealth(client);
+    g_iLastTankHealth = GetClientHealth(GetTankClient());
 }
 
 public Event_RoundStart(Handle:event, const String:name[], bool:dontBroadcast)
-{
-    g_bIsTankInPlay = false;
-    g_iTankClient = 0;
+{    
     ClearTankDamage(); // Probably redundant
 }
 
@@ -154,31 +166,9 @@ public Event_RoundEnd(Handle:event, const String:name[], bool:dontBroadcast)
         PrintTankDamage();
     }
     ClearTankDamage();
-}
-
-public Action:Timer_CheckTank(Handle:timer, any:oldtankclient)
-{
-    if (g_iTankClient != oldtankclient) return; // Tank passed
     
-    new tankclient = FindTankClient();
-    if (tankclient && tankclient != oldtankclient)
-    {
-        g_iTankClient = tankclient;
-        
-        return; // Found tank, done
-    }
-    
-    if (g_bAnnounceTankDamage) PrintTankDamage();
-    ClearTankDamage();
-    g_bIsTankInPlay = false; // No tank in play
-}
-
-bool:IsTankDying()
-{
-    new tankclient = GetTankClient();
-    if (!tankclient) return false;
-    
-    return bool:GetEntData(tankclient, g_iOffset_Incapacitated);
+    UnhookTankEvent(TANK_SPAWNED, Event_TankSpawn);
+    UnhookTankEvent(TANK_KILLED, Event_TankKilled);
 }
 
 PrintRemainingHealth()
@@ -258,40 +248,6 @@ ClearTankDamage()
         g_iDamage[i] = 0;
     }
     g_bAnnounceTankDamage = false;
-}
-
-
-GetTankClient()
-{
-    if (!g_bIsTankInPlay) return 0;
-    
-    new tankclient = g_iTankClient;
-    
-    if (!IsClientInGame(tankclient)) // If tank somehow is no longer in the game (kicked, hence events didn't fire)
-    {
-        tankclient = FindTankClient(); // find the tank client
-        if (!tankclient) return 0;
-        g_iTankClient = tankclient;
-    }
-    
-    return tankclient;
-}
-
-FindTankClient()
-{
-    for (new client = 1; client <= MaxClients; client++)
-    {
-        if (!IsClientInGame(client) ||
-            GetClientTeam(client) != TEAM_INFECTED ||
-            !IsPlayerAlive(client) ||
-            GetEntProp(client, Prop_Send, "m_zombieClass") != ZOMBIECLASS_TANK)
-        {
-            continue;
-        }
-        
-        return client; // Found tank, return
-    }
-    return 0;
 }
 
 GetDamageAsPercent(damage)

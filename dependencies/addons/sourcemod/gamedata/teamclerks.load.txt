@@ -28,6 +28,19 @@
       "4v4hu"           "teamclerks/4v4h.cfg" // Added to support Archer's key
       "skeetpractice"   "teamclerks/skeetpractice.cfg"
       "pub"             "teamclerks/pub.cfg"
+      
+      // The 'DEFAULT' key is different in that it will always be loaded at the
+      // start of the server.
+      // Additionally, the value for 'DEFAULT' must be the actual config file
+      // name. For instance, if you have the following key-value matchup:
+      //
+      //    "pub"       "teamclerks/notpub.cfg"
+      //
+      // the value for 'DEFAULT' to load this config must be "notpub". The load
+      // plugin will build the config path automatically and execute this conf
+      // once all the plugins are set up.
+      
+      "DEFAULT"         "pub"
     }
   }
 }

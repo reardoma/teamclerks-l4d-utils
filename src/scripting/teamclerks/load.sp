@@ -59,10 +59,14 @@ static       Handle: TC_CONFIG                    = INVALID_HANDLE;
 public _Load_OnPluginStart()
 {    
     TC_CONFIG = LoadGameConfigFile("teamclerks.load");
-    GameConfGetKeyValue(TC_CONFIG, "DEFAULT", currentlyLoaded, MAX_NAME_LENGTH);
+
+    decl String:defalt[MAX_NAME_LENGTH];
+    GameConfGetKeyValue(TC_CONFIG, "DEFAULT", defalt, MAX_NAME_LENGTH);
 
     RegAdminCmd("sm_force", _Load_OnCommandForce, ADMFLAG_CHANGEMAP, "sm_force <module> - force the loading of a modual.");
     RegConsoleCmd("sm_load", _Load_OnCommandLoad, "sm_load <module> - vote to load a module.");
+    
+    AutoExecConfig(true, defalt, "teamclerks");
 }
 
 /**

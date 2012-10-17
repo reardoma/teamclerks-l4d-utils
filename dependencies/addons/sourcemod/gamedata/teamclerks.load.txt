@@ -22,8 +22,10 @@
       "2v2"             "teamclerks/2v2.cfg"
       "3v3"             "teamclerks/3v3.cfg"
       "3v3h"            "teamclerks/3v3h.cfg"
+      "3v3hu"           "teamclerks/3v3h.cfg" // Added to support Archer's key
       "4v4"             "teamclerks/4v4.cfg"
       "4v4h"            "teamclerks/4v4h.cfg"
+      "4v4hu"           "teamclerks/4v4h.cfg" // Added to support Archer's key
       "skeetpractice"   "teamclerks/skeetpractice.cfg"
       "pub"             "teamclerks/pub.cfg"
     }

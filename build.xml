@@ -16,6 +16,7 @@
   <property name="cfg" value="${base}/src/cfg" />
   <property name="maps" value="${base}/src/maps" />
   <property name="build" value="${base}/build" />
+  <property name="release" value="${base}/release" />
   
   <!-- Dependencies (for the server; these folders map 1-1 with the server setup)      -->
   <property name="dependencies" value="${base}/dependencies" />
@@ -56,11 +57,9 @@
     <exec executable="${sourcePawn}" failonerror="true">
       <arg line="-D${src} &quot;l4dready.sp&quot;" />
     </exec>
-    <!-- 
     <exec executable="${sourcePawn}" failonerror="true">
       <arg line="-D${src} &quot;l4dscores.sp&quot;" />
     </exec>
-     -->
     <exec executable="${sourcePawn}" failonerror="true">
       <arg line="-D${src} &quot;lerps.sp&quot;" />
     </exec>
@@ -82,7 +81,7 @@
   <target name="build" depends="compile" description="Builds the plugin">
     <mkdir dir="${build}" />
     <move file="${src}/l4dready.smx" tofile="${build}/l4dready.smx" />
-    <!-- <move file="${src}/l4dscores.smx" tofile="${build}/l4dscores.smx" /> -->
+    <move file="${src}/l4dscores.smx" tofile="${build}/l4dscores.smx" />
     <move file="${src}/lerps.smx" tofile="${build}/lerps.smx" />
     <move file="${src}/tankannounce.smx" tofile="${build}/tankannounce.smx" />
     <move file="${src}/skeetannounce.smx" tofile="${build}/skeetannounce.smx" />
@@ -140,6 +139,46 @@
     </antcall>
   </target>
   
+  <target name="release" depends="build" description="Builds and releases the plugin in zip format">
+    <move file="${build}/l4dready.smx" tofile="${release}/addons/sourcemod/plugins/l4dready.smx" />
+    <move file="${build}/l4dscores.smx" tofile="${release}/addons/sourcemod/plugins/l4dscores.smx" />
+    <move file="${build}/lerps.smx" tofile="${release}/addons/sourcemod/plugins/lerps.smx" />
+    <move file="${build}/tankannounce.smx" tofile="${release}/addons/sourcemod/plugins/tankannounce.smx" />
+    <move file="${build}/skeetannounce.smx" tofile="${release}/addons/sourcemod/plugins/skeetannounce.smx" />
+    <move file="${build}/rotoblin.smx" tofile="${release}/addons/sourcemod/plugins/rotoblin.smx" />
+    <move file="${build}/${plugin}.smx" toFile="${release}/addons/sourcemod/plugins/${plugin}.smx" />
+    <copy todir="${release}/cfg/${plugin}">
+      <fileset dir="${cfg}/${plugin}">
+        <include name="**/*.cfg" />
+      </fileset>
+    </copy>
+    <copy todir="${release}/cfg">
+      <fileset dir="${cfg}/rotoblin">
+        <include name="**/*.cfg" />
+      </fileset>
+    </copy>
+    <copy todir="${release}/maps/cfg">
+      <fileset dir="${maps}/cfg">
+        <include name="**/*.cfg" />
+      </fileset>
+    </copy>
+    <copy todir="${release}/maps/cfg">
+      <fileset dir="${configs}">
+        <include name="**/*.cfg" />
+      </fileset>
+    </copy>
+    <copy todir="${release}/missions">
+      <fileset dir="${missions}">
+        <include name="**/*.txt" />
+      </fileset>
+    </copy>
+    <copy todir="${release}/addons/sourcemod/gamedata">
+      <fileset dir="${sm.gamedata}">
+        <include name="**/*.txt" />
+      </fileset>
+    </copy>
+    <zip destfile="${release}/teamclerks.zip" basedir="${release}" />
+  </target>
   
   <!--          -->
   <!-- PRIVATES -->

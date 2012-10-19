@@ -65,8 +65,6 @@ public _Load_OnPluginStart()
 
     RegAdminCmd("sm_force", _Load_OnCommandForce, ADMFLAG_CHANGEMAP, "sm_force <module> - force the loading of a modual.");
     RegConsoleCmd("sm_load", _Load_OnCommandLoad, "sm_load <module> - vote to load a module.");
-    
-    AutoExecConfig(true, defalt, "teamclerks");
 }
 
 /**

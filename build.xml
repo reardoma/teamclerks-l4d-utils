@@ -140,6 +140,17 @@
   </target>
   
   <target name="release" depends="build" description="Builds and releases the plugin in zip format">
+    <!-- Set up our temp folders for the release zip -->
+    <mkdir dir="${release}" />
+    <mkdir dir="${release}/addons" />
+    <mkdir dir="${release}/addons/sourcemod" />
+    <mkdir dir="${release}/addons/sourcemod/gamedata" />
+    <mkdir dir="${release}/addons/sourcemod/plugins" />
+    <mkdir dir="${release}/cfg" />
+    <mkdir dir="${release}/cfg/${plugin}" />
+    <mkdir dir="${release}/maps" />
+    <mkdir dir="${release}/missions" />
+    <!-- Move our plugins to the plugins folder -->
     <move file="${build}/l4dready.smx" tofile="${release}/addons/sourcemod/plugins/l4dready.smx" />
     <move file="${build}/l4dscores.smx" tofile="${release}/addons/sourcemod/plugins/l4dscores.smx" />
     <move file="${build}/lerps.smx" tofile="${release}/addons/sourcemod/plugins/lerps.smx" />
@@ -177,7 +188,10 @@
         <include name="**/*.txt" />
       </fileset>
     </copy>
-    <zip destfile="${release}/teamclerks.zip" basedir="${release}" />
+    <!-- ZIP THAT RELEASE UP! -->
+    <zip destfile="${base}/${plugin}-${TIMESTAMP_SHORT}.zip" basedir="${release}" />
+    <!-- Clean up the files -->
+    <delete dir="${release}" />
   </target>
   
   <!--          -->

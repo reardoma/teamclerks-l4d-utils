@@ -103,16 +103,17 @@ public _1v1_Event_PlayerPounced(Handle:event, const String:name[], bool:dontBroa
     new hunterHealth = GetClientHealth(hunterClient);
     new survivorClient = GetClientOfUserId(GetEventInt(event, "victim"));
     
-    PrintHintText(hunterClient,"%s had %i health left.", hunterName, hunterHealth);
-    PrintHintText(survivorClient,"%s had %i health left.", hunterName, hunterHealth);
+    PrintToChat(hunterClient,"\x01[SM] \x05%s\x01 had \x05%i\x01 health left.", hunterName, hunterHealth);
+    PrintToChat(survivorClient,"\x01[SM] \x05%s\x01 had \x05%i\x01 health left.", hunterName, hunterHealth);
     
     new Handle:hunterPack;
-    _1v1_HunterSurvivor[hunterClient] = CreateDataTimer(1.0, _1v1_killPouncedHunter, hunterPack);
+    _1v1_HunterSurvivor[hunterClient] = CreateDataTimer(1.25, _1v1_killPouncedHunter, hunterPack);
     WritePackCell(hunterPack, hunterClient);
     
-    new Handle:survivorPack;
-    _1v1_HunterSurvivor[survivorClient] = CreateDataTimer(2.0, _1v1_adjustSurvivorHealth, survivorPack);
-    WritePackCell(survivorPack, survivorClient);
+    // Turning this off for some testing.
+    //new Handle:survivorPack;
+    //_1v1_HunterSurvivor[survivorClient] = CreateDataTimer(2.0, _1v1_adjustSurvivorHealth, survivorPack);
+    //WritePackCell(survivorPack, survivorClient);
 }
 
 public Action:_1v1_killPouncedHunter(Handle:timer, Handle:pack)
@@ -167,7 +168,7 @@ public Action:_1v1_Event_AbilityUsed(Handle:event, const String:name[], bool:don
     if(Is_Client_Player_Infected(Client) && strcmp(AbilityName, "ability_lunge", false) == 0) //pouncing
     {
         ForcePlayerSuicide(Client);
-        PrintToChatAll("[1v1] Blocked %N from wallkicking.", Client);
+        PrintToChatAll("\x01[1v1] Blocked \x05%N\x01 from wallkicking.", Client);
         return Plugin_Stop;
     }
     

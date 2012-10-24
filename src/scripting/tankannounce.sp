@@ -64,6 +64,8 @@ public Plugin:myinfo =
 new bool:   g_bEnabled                 = true;
 // Whether or not tank damage should be announced
 new bool:   g_bAnnounceTankDamage      = false;
+new bool:   g_bHooked                  = false;
+new bool:   g_bTankLived               = false;
 // Used to award the killing blow the exact right amount of damage
 new         g_iLastTankHealth          = 0;
 // For survivor array in damage print
@@ -109,7 +111,7 @@ public OnPluginStartEx()
 public Cvar_Enabled(Handle:convar, const String:oldValue[], 
         const String:newValue[])
 {
-    g_bEnabled = StringToInt(newValue) > 0 ? true:false;
+    g_bEnabled = StringToInt(newValue) > 0;
     
     SetPluginState(g_bEnabled);
 }
@@ -135,11 +137,6 @@ public _TA_OnPluginEnable()
     HookEvent("round_start", Event_RoundStart);
     HookEvent("round_end", Event_RoundEnd);
     HookEvent("player_hurt", Event_PlayerHurt);
-    
-    g_bAnnounceTankDamage = false;
-    ClearTankDamage();
-    
-    HookPublicEvent(EVENT_ONMAPSTART, TA_OnMapStart);
 }
 
 /**
@@ -149,27 +146,9 @@ public _TA_OnPluginEnable()
  */
 public _TA_OnPluginDisable()
 {
-    
     UnhookEvent("round_start", Event_RoundStart);
     UnhookEvent("round_end", Event_RoundEnd);
     UnhookEvent("player_hurt", Event_PlayerHurt);
-    
-    UnhookPublicEvent(EVENT_ONMAPSTART, TA_OnMapStart);
-}
-
-/**
- * Called at the start of a map.
- * 
- * Hooks the tank events we care about (spawned and killed) and clears out any
- * damage that may be saved from a previous map or round.
- */
-public TA_OnMapStart()
-{
-    HookTankEvent(TANK_SPAWNED, Event_TankSpawn);
-    HookTankEvent(TANK_KILLED, Event_TankKilled);
-    
-    // In cases where a tank spawns and map is changed manually, clearing.
-    ClearTankDamage();
 }
 
 /**
@@ -181,6 +160,7 @@ public TA_OnMapStart()
  */
 public Event_TankSpawn(Handle:event, const String:name[], bool:dontBroadcast)
 {   
+    ClearTankDamage();
     // Set the max health to whatever the health is right now since the tank 
     // hasn't taken damage yet (hopefully).
     g_fMaxTankHealth = float(GetClientHealth(GetTankClient()));
@@ -189,6 +169,8 @@ public Event_TankSpawn(Handle:event, const String:name[], bool:dontBroadcast)
     // Set health for damage print in case it doesn't get set by player_hurt 
     // (aka no one shoots the tank)
     g_iLastTankHealth = GetClientHealth(GetTankClient());
+    // This is the ONLY place we will set this value to true.
+    g_bTankLived = true;
 }
 
 /**
@@ -198,11 +180,12 @@ public Event_TankSpawn(Handle:event, const String:name[], bool:dontBroadcast)
  */
 public Event_TankKilled(Handle:event, const String:name[], bool:dontBroadcast)
 {
-    if (g_bAnnounceTankDamage)
+    if (g_bAnnounceTankDamage && g_bTankLived)
     {
         PrintTankDamage();
     }
-    ClearTankDamage();
+    // We have reported it... he has not "lived" anymore.
+    g_bTankLived = false;
 }
 
 /**
@@ -238,16 +221,6 @@ public Event_PlayerHurt(Handle:event, const String:name[], bool:dontBroadcast)
 }
 
 /**
- * Called at the beginning of the round.
- * Zeroes out the damage report.
- */
-public Event_RoundStart(Handle:event, const String:name[], bool:dontBroadcast)
-{
-    // Probably redundant
-    ClearTankDamage();
-}
-
-/**
  * Called at the end of the round.
  * Zeroes out the damage report and will print the remaining health of the tank
  * if the survivors wiped or ended up juking around the tank and making it to
@@ -256,15 +229,44 @@ public Event_RoundStart(Handle:event, const String:name[], bool:dontBroadcast)
 public Event_RoundEnd(Handle:event, const String:name[], bool:dontBroadcast)
 {
     // But only if a tank that hasn't been killed and exists
-    if (g_bAnnounceTankDamage)
+    if (g_bAnnounceTankDamage && g_bTankLived)
     {
         PrintRemainingHealth();
         PrintTankDamage();
     }
-    ClearTankDamage();
     
-    UnhookTankEvent(TANK_SPAWNED, Event_TankSpawn);
-    UnhookTankEvent(TANK_KILLED, Event_TankKilled);
+    if (g_bHooked)
+    {
+        UnhookTankEvent(TANK_SPAWNED, Event_TankSpawn);
+        UnhookTankEvent(TANK_KILLED, Event_TankKilled);
+        g_bHooked = false;
+    }
+    
+    // We have either reported it or there was no tank
+    g_bTankLived = false;
+}
+
+public Event_RoundStart(Handle:event, const String:name[], bool:dontBroadcast)
+{
+    // This could be true if no round_end event was fired (say a map change was
+    // called and round_end got interrupted).
+    if (g_bHooked)
+    {
+        UnhookTankEvent(TANK_SPAWNED, Event_TankSpawn);
+        UnhookTankEvent(TANK_KILLED, Event_TankKilled);
+        g_bHooked = false;
+    }
+    
+    // There are definitely no events hooked and g_bHooked MUST be false.    
+    HookTankEvent(TANK_SPAWNED, Event_TankSpawn);
+    HookTankEvent(TANK_KILLED, Event_TankKilled);
+    // This is the only place we set g_bHooked to true since this is the
+    // only place we hook tank events.
+    g_bHooked = true;
+
+    
+    // There cannot have been a tank yet.
+    g_bTankLived = false;
 }
 
 /**

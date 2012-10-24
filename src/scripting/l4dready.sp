@@ -505,87 +505,104 @@ stock GetTeamMaxHumans(team)
     return -1;
 }
 
-public Action:Join_Survivor(client, args)	//on !survivor
-{	
-	new maxSurvivorSlots = GetTeamMaxHumans(2);
-	new survivorUsedSlots = GetTeamHumanCount(2);
-	new freeSurvivorSlots = (maxSurvivorSlots - survivorUsedSlots);
-	//debug
-	//PrintToChatAll("Number of Survivor Slots %d.\nNumber of Survivor Players %d.\nNumber of Free Slots %d.", maxSurvivorSlots, survivorUsedSlots, freeSurvivorSlots);
-	
-	if (GetClientTeam(client) == 2)			//if client is survivor
-	{
-		PrintToChat(client, "[SM] You are already on the Survivor team.");
-		return Plugin_Handled;
-	}
-	if (freeSurvivorSlots <= 0)
-	{
-		PrintToChat(client, "[SM] Survivor team is full.");
-		return Plugin_Handled;
-	}
-	else
-	{
-		new bot;
-		
-		for(bot = 1; 
-			bot < (MaxClients + 1) && (!IsClientConnected(bot) || !IsFakeClient(bot) || (GetClientTeam(bot) != 2));
-			bot++) {}
-		
-		if(bot == (MaxClients + 1))
-		{			
-			new String:command[] = "sb_add";
-			new flags = GetCommandFlags(command);
-			SetCommandFlags(command, flags & ~FCVAR_CHEAT);
-			
-			ServerCommand("sb_add");
-			
-			SetCommandFlags(command, flags);
-		}
-		CreateTimer(0.1, Survivor_Take_Control, client, TIMER_FLAG_NO_MAPCHANGE);
-	}
-	return Plugin_Handled;
+public Action:Join_Survivor(client, args)    //on !survivor
+{    
+    new maxSurvivorSlots = GetTeamMaxHumans(2);
+    new survivorUsedSlots = GetTeamHumanCount(2);
+    new freeSurvivorSlots = (maxSurvivorSlots - survivorUsedSlots);
+    //debug
+    //PrintToChatAll("Number of Survivor Slots %d.\nNumber of Survivor Players %d.\nNumber of Free Slots %d.", maxSurvivorSlots, survivorUsedSlots, freeSurvivorSlots);
+    
+    if (GetClientTeam(client) == 2)            //if client is survivor
+    {
+        PrintToChat(client, "[SM] You are already on the Survivor team.");
+        return Plugin_Handled;
+    }
+    if (freeSurvivorSlots <= 0)
+    {
+        PrintToChat(client, "[SM] Survivor team is full.");
+        return Plugin_Handled;
+    }
+    else
+    {
+        new bot;
+        
+        for(bot = 1; 
+            bot < (MaxClients + 1) && (!IsClientConnected(bot) || !IsFakeClient(bot) || (GetClientTeam(bot) != 2));
+            bot++) {}
+        
+        if(bot == (MaxClients + 1))
+        {            
+            new String:command[] = "sb_add";
+            new flags = GetCommandFlags(command);
+            SetCommandFlags(command, flags & ~FCVAR_CHEAT);
+            
+            ServerCommand("sb_add");
+            
+            SetCommandFlags(command, flags);
+        }
+        CreateTimer(0.1, Survivor_Take_Control, client, TIMER_FLAG_NO_MAPCHANGE);
+    }
+    return Plugin_Handled;
 }
 
 public Action:Survivor_Take_Control(Handle:timer, any:client)
 {
-		new localClientTeam = GetClientTeam(client);
-		new String:command[] = "sb_takecontrol";
-		new flags = GetCommandFlags(command);
-		SetCommandFlags(command, flags & ~FCVAR_CHEAT);
-		new String:botNames[][] = { "teengirl", "manager", "namvet", "biker" };
-		
-		new i = 0;
-		while((localClientTeam != 2) && i < 4)
-		{
-			FakeClientCommand(client, "sb_takecontrol %s", botNames[i]);
-			localClientTeam = GetClientTeam(client);
-			i++;
-		}
-		SetCommandFlags(command, flags);
+        new originalClientTeam = GetClientTeam(client);
+        new localClientTeam = originalClientTeam;
+        new String:command[] = "sb_takecontrol";
+        new flags = GetCommandFlags(command);
+        SetCommandFlags(command, flags & ~FCVAR_CHEAT);
+        new String:botNames[][] = { "teengirl", "manager", "namvet", "biker" };
+        
+        new i = 0;
+        while((localClientTeam != 2) && i < 4)
+        {
+            FakeClientCommand(client, "sb_takecontrol %s", botNames[i]);
+            localClientTeam = GetClientTeam(client);
+            if (!IsPlayerAlive(client))
+            {
+                localClientTeam = originalClientTeam;
+            }
+            i++;
+        }
+        if (localClientTeam == originalClientTeam)
+        {
+            // We MIGHT have just not wanted a dead player, but could not take
+            // control otherwise; let's just grab ANY survivor now.
+            i = 0;
+            while((localClientTeam != 2) && i < 4)
+            {
+                FakeClientCommand(client, "sb_takecontrol %s", botNames[i]);
+                localClientTeam = GetClientTeam(client);
+                i++;
+            }
+        }
+        SetCommandFlags(command, flags);
 }
 
 
-public Action:Join_Infected(client, args)	//on !infected
-{	
-	new maxInfectedSlots = GetTeamMaxHumans(3);
-	new infectedUsedSlots = GetTeamHumanCount(3);
-	new freeInfectedSlots = (maxInfectedSlots - infectedUsedSlots);
-	//PrintToChatAll("Number of Infected Slots %d.\nNumber of Infected Players %d.\nNumber of Free Slots %d.", maxInfectedSlots, infectedUsedSlots, freeInfectedSlots);
-	if (GetClientTeam(client) == 3)			//if client is infected
-	{
-		PrintToChat(client, "[SM] You are already on the Infected team.");
-		return Plugin_Handled;
-	}
-	if (freeInfectedSlots <= 0)
-	{
-		PrintToChat(client, "[SM] Infected team is full.");
-		return Plugin_Handled;
-	}
-	else
-	{
-		ChangeClientTeam(client, 3);	//ServerCommand("sm_swapto %N 3",client);	//swapping the client to the infected team if he is spectator or survivor
-	}
-	return Plugin_Handled;
+public Action:Join_Infected(client, args)    //on !infected
+{    
+    new maxInfectedSlots = GetTeamMaxHumans(3);
+    new infectedUsedSlots = GetTeamHumanCount(3);
+    new freeInfectedSlots = (maxInfectedSlots - infectedUsedSlots);
+    //PrintToChatAll("Number of Infected Slots %d.\nNumber of Infected Players %d.\nNumber of Free Slots %d.", maxInfectedSlots, infectedUsedSlots, freeInfectedSlots);
+    if (GetClientTeam(client) == 3)            //if client is infected
+    {
+        PrintToChat(client, "[SM] You are already on the Infected team.");
+        return Plugin_Handled;
+    }
+    if (freeInfectedSlots <= 0)
+    {
+        PrintToChat(client, "[SM] Infected team is full.");
+        return Plugin_Handled;
+    }
+    else
+    {
+        ChangeClientTeam(client, 3);    //ServerCommand("sm_swapto %N 3",client);    //swapping the client to the infected team if he is spectator or survivor
+    }
+    return Plugin_Handled;
 }
 
 /**

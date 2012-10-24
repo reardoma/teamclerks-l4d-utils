@@ -30,11 +30,27 @@ public OnPluginStart()
     HookEvent("player_hurt",Event_PlayerHurt);
     HookEvent("ability_use",Event_AbilityUse);
     HookEvent("player_death",Event_PlayerDeath);
+    HookEvent("round_start",Event_RoundStart);
     
     CreateConVar("skeetannounce_version",PLUGIN_VERSION,"SkeetAnnounce Version",FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY|FCVAR_DONTRECORD);
     hVerbosity = CreateConVar("skeetannounce_verbosity","3","The verbosity level of skeet announce. Default is 3.",FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY);
     hDeathSkeets = CreateConVar("skeetannounce_deathskeets","1","Only prints skeet information if the player is killed by the skeet. Otherwise, it prints any damage incured while skeeting. Default is 1.",FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY);
     AutoExecConfig(true,"skeetannounce");
+}
+
+// Always clear this out at the beginning of a round or we get weird results.
+public Event_RoundStart(Handle:event, const String:name[], bool:dontBroadcast)
+{
+    for (new i=0; i < MAXPLAYERS+1; i++)
+    {
+        pouncing[i] = false;
+        for (new j=0; j < MAXPLAYERS+1; j++)
+        {
+            damageDone[i][j] = 0;
+            hitsDone  [i][j] = 0;
+            headshots [i][j] = 0;
+        }
+    }
 }
 
 public Event_PlayerShoved(Handle:event, const String:name[], bool:dontBroadcast)
@@ -52,6 +68,11 @@ public Event_PlayerShoved(Handle:event, const String:name[], bool:dontBroadcast)
         GetClientName(attacker,attackerName,sizeof(attackerName));
         PrintToChatAll("%s deadstopped %s",attackerName, victimName);
     }
+    // Prevent this hunter from being reported as skeeted; he got ds'd
+    pouncing[victim] = false;
+    hitsDone[victim][attacker] = 0;
+    damageDone[victim][attacker] = 0;
+    headshots[victim][attacker] = 0;
 }
 
 
@@ -118,6 +139,8 @@ public Event_PlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
             }
         }
     }
+    // Might not have been pouncing before, and this might get cleared by the timer... redundancy is nigh-free.
+    pouncing[victim] = false;
 }
 
 public Event_AbilityUse(Handle:event, const String:name[], bool:dontBroadcast)

@@ -116,8 +116,8 @@ public _SP_Event_PlayerPounced(Handle:event, const String:name[], bool:dontBroad
     new hunterHealth = GetClientHealth(hunterClient);
     new survivorClient = GetClientOfUserId(GetEventInt(event, "victim"));
     
-    PrintHintText(hunterClient,"%s had %i health left.", hunterName, hunterHealth);
-    PrintHintText(survivorClient,"%s had %i health left.", hunterName, hunterHealth);
+    PrintToChat(hunterClient,"\x01[SM] \x05%s\x01 had \x05%i\x01 health left.", hunterName, hunterHealth);
+    PrintToChat(survivorClient,"\x01[SM] \x05%s\x01 had \x05%i\x01 health left.", hunterName, hunterHealth);
     
     new Handle:hunterPack;
     _SP_HunterSurvivor[hunterClient] = CreateDataTimer(1.0, _SP_killPouncedHunter, hunterPack);

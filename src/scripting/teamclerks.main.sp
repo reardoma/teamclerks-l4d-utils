@@ -156,7 +156,7 @@ public OnPluginStartEx()
     _H_ClientIndexes_OnPluginStart();
     _H_CommandManager_OnPluginStart();
     
-    _CvarSilencer_OnPluginStart();
+    //_CvarSilencer_OnPluginStart();
     _SkeetPractice_OnPluginStart();
     _1v1_OnPluginStart();
     _Load_OnPluginStart();

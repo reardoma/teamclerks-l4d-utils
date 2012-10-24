@@ -45,7 +45,7 @@ new          String: currentlyLoaded[]            = "";
 // --------------------
 //     Private
 // --------------------
-static       Handle: TC_CONFIG                    = INVALID_HANDLE;
+
 
 // **********************************************
 //             Forwards
@@ -57,12 +57,7 @@ static       Handle: TC_CONFIG                    = INVALID_HANDLE;
  * @noreturn
  */
 public _Load_OnPluginStart()
-{    
-    TC_CONFIG = LoadGameConfigFile("teamclerks.load");
-
-    decl String:defalt[MAX_NAME_LENGTH];
-    GameConfGetKeyValue(TC_CONFIG, "DEFAULT", defalt, MAX_NAME_LENGTH);
-
+{
     RegAdminCmd("sm_force", _Load_OnCommandForce, ADMFLAG_CHANGEMAP, "sm_force <module> - force the loading of a modual.");
     RegConsoleCmd("sm_load", _Load_OnCommandLoad, "sm_load <module> - vote to load a module.");
 }
@@ -84,7 +79,7 @@ public Action:_Load_OnCommandForce(client, args)
     
     if (!_Load_Check_Module(module))
     {
-        PrintToChat(client, "Module '%s' not available", module);
+        PrintToChat(client, "\x01[SM] Module \x05%s\x01 not available", module);
         return Plugin_Handled;
     }
     
@@ -111,7 +106,7 @@ public Action:_Load_OnCommandLoad(client, args)
     
     if (!_Load_Check_Module(module))
     {
-        PrintToChat(client, "Module '%s' not available", module);
+        PrintToChat(client, "\x01[SM] Module \x05%s\x01 not available", module);
         return Plugin_Handled;
     }
     
@@ -139,7 +134,7 @@ public Action:_Load_Tally_Votes(Handle:timer)
         else
         {
             // Vote failed.
-            PrintToChatAll("Vote failed for module: %s", votingOn);
+            PrintToChatAll("\x01[SM] Vote failed for module: \x05%s\x01", votingOn);
         }
         
         _Load_End_Vote(votingOn);
@@ -226,7 +221,7 @@ _Load_Vote_On_Module(client, String:target[])
         }
         else
         {
-            PrintToChat(client, "You started a vote within the last %i seconds; please wait to start a new one.", 20);
+            PrintToChat(client, "\x01[SM] You started a vote within the last \x05%i\x01 seconds; you must wait to start a new one.", 20);
         }
     }
     else
@@ -245,13 +240,13 @@ _Load_Cast_Vote(client, String:target[])
     if (hasVoted[client])
     {
         // Naughty; send a message back.
-        PrintToChat(client, "You have already cast your vote for %s.", target);
+        PrintToChat(client, "\x01[SM] You have already cast your vote for \x01%s\x01.", target);
     }
     else
     {
         hasVoted[client] = true;
         
-        PrintToChat(client, "You have cast a vote for %s.", target);
+        PrintToChat(client, "\x01[SM] You have cast a vote for \x05%s\x01.", target);
         
         if (_Load_Is_Vote_Passing(true))
         {
@@ -280,8 +275,8 @@ _Load_Start_Vote(client, String:target[])
     decl String:nick[64];
     GetClientName(client, nick, sizeof(nick));
     
-    PrintToChatAll("%s has started a vote for: %s ", nick, target);
-    PrintToChatAll("Type \"!%s\" to cast a vote in favor of this config load.", target);
+    PrintToChatAll("\x01[SM] \x05%s\x01 has started a vote for: \x05%s\x01", nick, target);
+    PrintToChatAll("\x01[SM] Type \x05!%s\x01 in chat to vote for this config.", target);
     
     // If we're the only player, then it should load.
     if (_Load_Is_Vote_Passing(true))
@@ -298,7 +293,15 @@ _Load_Start_Vote(client, String:target[])
  */
 bool:_Load_Check_Module(String:target[], String:toLoad[]="")
 {
-    return GameConfGetKeyValue(TC_CONFIG, target, toLoad, MAX_NAME_LENGTH);
+    new Handle:conf = LoadGameConfigFile("teamclerks.load");
+    new bool:toRet = false;
+    if (conf != INVALID_HANDLE)
+    {
+        toRet = GameConfGetKeyValue(conf, target, toLoad, MAX_NAME_LENGTH);
+    }
+    // Regardless, always clear out this handle
+    conf = INVALID_HANDLE;
+    return toRet;
 }
 
 /**
@@ -310,7 +313,7 @@ _Load_Load_Module(String:target[])
     
     if (_Load_Check_Module(target, loadable))
     {
-        PrintToChatAll("Vote successful; loading module: %s...", target);
+        PrintToChatAll("\x01[SM] Vote successful; loading module: \x05%s\x01...", target);
         votePassed = true;
         // Successfully read the target's value from the config file into loadable.
         _Load_End_Vote(target);

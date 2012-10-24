@@ -26,7 +26,7 @@
       "4v4"             "teamclerks/4v4.cfg"
       "4v4h"            "teamclerks/4v4h.cfg"
       "4v4hu"           "teamclerks/4v4h.cfg" // Added to support Archer's key
-      "skeetpractice"   "teamclerks/skeetpractice.cfg"
+      "skeetpractice"   "teamclerks/skeet_practice.cfg"
       "pub"             "teamclerks/pub.cfg"
       
       // The 'DEFAULT' key is different in that it will always be loaded at the

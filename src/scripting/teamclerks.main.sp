@@ -75,10 +75,11 @@
 
 #include "teamclerks/helpers/clients.inc"
 
-#include "teamclerks/cvarsilencer.sp"
 #include "teamclerks/load.sp"
 #include "teamclerks/skeetpractice.sp"
 #include "teamclerks/1v1.sp"
+#include "teamclerks/witchannounce.sp"
+#include "teamclerks/silentcvars.sp"
 
 // --------------------
 //       Private
@@ -156,10 +157,11 @@ public OnPluginStartEx()
     _H_ClientIndexes_OnPluginStart();
     _H_CommandManager_OnPluginStart();
     
-    //_CvarSilencer_OnPluginStart();
     _SkeetPractice_OnPluginStart();
     _1v1_OnPluginStart();
     _Load_OnPluginStart();
+    _WA_OnPluginStart();
+    _SC_OnPluginStart();
     
     // Create cvar for control plugin state
     Format(buffer, sizeof(buffer), "Sets whether %s is enabled", PLUGIN_FULLNAME);

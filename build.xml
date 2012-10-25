@@ -61,9 +61,6 @@
       <arg line="-D${src} &quot;l4dscores.sp&quot;" />
     </exec>
     <exec executable="${sourcePawn}" failonerror="true">
-      <arg line="-D${src} &quot;lerps.sp&quot;" />
-    </exec>
-    <exec executable="${sourcePawn}" failonerror="true">
       <arg line="-D${src} &quot;tankannounce.sp&quot;" />
     </exec>
     <exec executable="${sourcePawn}" failonerror="true">
@@ -82,7 +79,6 @@
     <mkdir dir="${build}" />
     <move file="${src}/l4dready.smx" tofile="${build}/l4dready.smx" />
     <move file="${src}/l4dscores.smx" tofile="${build}/l4dscores.smx" />
-    <move file="${src}/lerps.smx" tofile="${build}/lerps.smx" />
     <move file="${src}/tankannounce.smx" tofile="${build}/tankannounce.smx" />
     <move file="${src}/skeetannounce.smx" tofile="${build}/skeetannounce.smx" />
     <!-- <copy file="${sm.plugins}/l4dscores.smx" tofile="${build}/l4dscores.smx" /> -->
@@ -97,7 +93,6 @@
   <target name="dist" depends="compile" description="Builds and distributes the plugin">
     <move file="${src}/l4dready.smx" tofile="${dist}/addons/sourcemod/plugins/l4dready.smx" />
     <!-- <move file="${src}/l4dscores.smx" tofile="${dist}/addons/sourcemod/plugins/l4dscores.smx" /> -->
-    <move file="${src}/lerps.smx" tofile="${dist}/addons/sourcemod/plugins/lerps.smx" />
     <move file="${src}/tankannounce.smx" tofile="${dist}/addons/sourcemod/plugins/tankannounce.smx" />
     <move file="${src}/skeetannounce.smx" tofile="${dist}/addons/sourcemod/plugins/skeetannounce.smx" />
     <!-- <copy file="${sm.plugins}/l4dscores.smx" tofile="${dist}/addons/sourcemod/plugins/l4dscores.smx" /> -->
@@ -153,7 +148,6 @@
     <!-- Move our plugins to the plugins folder -->
     <move file="${build}/l4dready.smx" tofile="${release}/addons/sourcemod/plugins/l4dready.smx" />
     <move file="${build}/l4dscores.smx" tofile="${release}/addons/sourcemod/plugins/l4dscores.smx" />
-    <move file="${build}/lerps.smx" tofile="${release}/addons/sourcemod/plugins/lerps.smx" />
     <move file="${build}/tankannounce.smx" tofile="${release}/addons/sourcemod/plugins/tankannounce.smx" />
     <move file="${build}/skeetannounce.smx" tofile="${release}/addons/sourcemod/plugins/skeetannounce.smx" />
     <move file="${build}/rotoblin.smx" tofile="${release}/addons/sourcemod/plugins/rotoblin.smx" />

@@ -43,7 +43,6 @@ public _SkeetPractice_OnPluginStart()
 public _SP_OnPluginEnabled()
 {
     HookConVarChange(g_hSkeetPracticeCvar, _SkeetPractice_CvarChange);
-    HookTankEvent(TANK_SPAWNED, _SkeetPractice_TankSpawned);
 }
 
 /**
@@ -54,18 +53,6 @@ public _SP_OnPluginEnabled()
 public _SP_OnPluginDisabled()
 {
     UnhookConVarChange(g_hSkeetPracticeCvar, _SkeetPractice_CvarChange);
-    UnhookTankEvent(TANK_SPAWNED, _SkeetPractice_TankSpawned);
-}
-
-/**
- * Fired when a tank spawns; technically we don't want this to happen EVER in 
- * skeet practice, so we just remove the tank entirely.
- */
-public _SkeetPractice_TankSpawned(Handle:event, const String:name[], bool:dontBroadcast)
-{
-    new tankClient = GetClientOfUserId(GetEventInt(event, "userid"));
-    // Hopefully, this tankClient will NEVER be a player with this mod enabled.
-    ForcePlayerSuicide(tankClient);
 }
 
 /**
@@ -98,6 +85,7 @@ public _SkeetPractice_CvarChange(Handle:convar, const String:oldValue[], const S
 }
 
 new Handle:_SP_HunterSurvivor[MAXPLAYERS+1];
+new Handle:_SP_Hunter[MAXPLAYERS+1];
 
 public _SP_OnClientDisconnect(client)
 {
@@ -105,6 +93,11 @@ public _SP_OnClientDisconnect(client)
     {
         KillTimer(_SP_HunterSurvivor[client]);
         _SP_HunterSurvivor[client] = INVALID_HANDLE;
+    }
+    if (_SP_Hunter[client] != INVALID_HANDLE)
+    {
+        KillTimer(_SP_Hunter[client]);
+        _SP_Hunter[client] = INVALID_HANDLE;
     }
 }
 
@@ -161,6 +154,40 @@ public Action:_SP_healPouncedSurvivor(Handle:timer, Handle:pack)
     _SP_HunterSurvivor[survivorClient] = INVALID_HANDLE;
 }
 
+public Action:_SP_healHunter(Handle:timer, Handle:pack)
+{
+    new hunterClient;
+    
+    ResetPack(pack);
+    hunterClient = ReadPackCell(pack);
+    
+    new flags = GetCommandFlags("give");
+    // Turn this off as a cheat
+    SetCommandFlags("give", flags & ~FCVAR_CHEAT);
+    if (IsClientInGame(hunterClient))
+    {
+        // Make the hunter give himself some health
+        FakeClientCommandEx(hunterClient, "give health");
+    }
+    // QUICK, turn it back on as a cheat
+    SetCommandFlags("give", flags | FCVAR_CHEAT);
+    
+    _SP_Hunter[hunterClient] = INVALID_HANDLE;
+}
+
+public _SP_Event_PlayerHurt(Handle:event, const String:name[], bool:dontBroadcast)
+{
+    if (Is_Client_Player_Infected(GetEventInt(event, "userid")) &&
+        GetEntProp(GetEventInt(event, "userid"), Prop_Send, "m_zombieClass") == 1)
+    {
+        new hunterClient = GetEventInt(event, "userid");
+        
+        new Handle:hunterPack;
+        _SP_Hunter[hunterClient] = CreateDataTimer(1.0, _SP_healHunter, hunterPack);
+        WritePackCell(hunterPack, hunterClient);
+    }
+}
+
 //
 // Private methods
 //
@@ -169,9 +196,11 @@ CommandSkeetPracticeStart()
 {
     // Hook the pounce event up.
     HookEvent("lunge_pounce", _SP_Event_PlayerPounced);
+    HookEvent("player_hurt", _SP_Event_PlayerHurt);
 }
 
 CommandSkeetPracticeStop()
 {    
     UnhookEvent("lunge_pounce", _SP_Event_PlayerPounced);
+    UnhookEvent("player_hurt", _SP_Event_PlayerHurt);
 }

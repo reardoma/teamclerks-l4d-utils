@@ -30,6 +30,7 @@
 #define _teamclerks_load
 
 #define VOTE_THRESHOLD 0.5
+#define DEFAULT_KEY "DEFAULT"
 
 // --------------------
 //     Public
@@ -41,6 +42,7 @@ new            bool: tallyingVotes                = false;
 new            bool: votePassed                   = false;
 new          Handle: recentVoters[MAXPLAYERS+1];
 new          String: currentlyLoaded[]            = "";
+new            bool: serverHasStarted             = false;
 
 // --------------------
 //     Private
@@ -60,6 +62,20 @@ public _Load_OnPluginStart()
 {
     RegAdminCmd("sm_force", _Load_OnCommandForce, ADMFLAG_CHANGEMAP, "sm_force <module> - force the loading of a modual.");
     RegConsoleCmd("sm_load", _Load_OnCommandLoad, "sm_load <module> - vote to load a module.");
+    
+    CreateTimer(5.0, _Load_LoadServerDefault, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action:_Load_LoadServerDefault(Handle:timer)
+{
+    if (!serverHasStarted)
+    {
+        // Try and load the default config
+        decl String:module[64];
+        _Load_Check_Module(DEFAULT_KEY, module);
+        _Load_Load_Module(module);
+        serverHasStarted = true;
+    }
 }
 
 /**

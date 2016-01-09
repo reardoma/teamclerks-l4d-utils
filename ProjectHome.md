@@ -1,0 +1,1 @@
+A plugin with a collection of useful L4D utilities such as vote-based config loading, 1v1 server setup, multi-Smoker mode, skeet practice, and more.
